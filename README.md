@@ -227,7 +227,7 @@ in cleartext over HTTP on a home network and is not real authentication.
 |----------|-----|------|
 | `GET /api/batch?n=` | board | today's set — the same answer all day |
 | `POST /api/progress` | board | reports what it showed and what was marked known |
-| `GET /api/entries` | browser | list, search, filter, paged 50 at a time |
+| `GET /api/entries` | browser | search, multi-value filters, sort, paged |
 | `PUT`/`DELETE /api/entries/<id>` | browser | edit in place, or remove |
 | `POST /api/entries` | browser | add one |
 | `POST /api/import` | browser | paste tab- or pipe-separated lines in bulk |
@@ -240,6 +240,29 @@ stale one — the deck and every bit of progress live in that one file, and rena
 only step that is atomic. Ids are never reused: progress is keyed off them, so a recycled
 id would silently inherit the history of a deleted entry.
 
+## The web UI
+
+Filters combine: several types, several levels, several statuses at once, plus a
+today's-set toggle. Any column can be sorted from its header. Page size is 25 to 200.
+
+**The whole view lives in the URL.** Filters, sort, page and page size are query
+parameters, so a view survives a reload, can be bookmarked, and gets browser back and
+forward for free — which `localStorage` would not have given.
+
+Search is accent- and case-insensitive, so `tiep can` finds `tiếp cận`; typing Vietnamese
+diacritics to look something up is exactly the friction this project exists to remove.
+
+| Syntax | Does |
+|--------|------|
+| `word another` | both must match — adding a word narrows |
+| `front:used` | scope to one column (`back:`, `ex:` too) |
+| `"the more"` | keep a phrase together |
+| `-fair` | exclude |
+
+Matches are highlighted in place, respecting the scope: `front:used` does not mark up the
+example column, because the query never looked there. Cells edit in place — they read as
+plain text until focused — and commit on blur or Enter, with Escape to abandon.
+
 ## Hardware
 
 A [TTGO T-Display](https://www.espboards.dev/esp32/lilygo-ttgo-t-display-1-14/) — ESP32
@@ -248,7 +271,14 @@ with a 1.14" 135×240 ST7789. Around $10.
 | Button | Tap | Hold |
 |--------|-----|------|
 | GPIO 35 | advance — flip the card, or move to the next one | 1.5s: **rotate the screen 180°** |
-| GPIO 0 | mark known — the entry never returns | 0.6s: toggle the backlight |
+| GPIO 0 | toggle the backlight | 0.8s: **mark known** — the entry never returns |
+
+Marking known sits behind a hold, not a tap, because GPIO 0 is the boot-strap pin and is
+driven by the USB bridge's DTR line. Opening a serial port produces a pulse on it that
+looks exactly like a deliberate press, and it silently deleted words from the deck until
+the mapping was inverted. Pulse-length guards were tried first and one still got through;
+what fixed it was putting the harmless action on the easy gesture, so the worst a phantom
+pulse can now do is blink the backlight.
 
 The rotation is remembered, so it survives a reboot and a reflash. `SCREEN_ROTATION` in
 `config.h` only sets the starting value. Flipping the image does not move the buttons, so

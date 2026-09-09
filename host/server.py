@@ -15,7 +15,7 @@ Two audiences share the API:
 
   the board   GET  /api/batch      today's set, the same answer all day
               POST /api/progress   what it has shown and what was marked known
-  the browser GET  /api/entries    list, search, filter, paged
+  the browser GET  /api/entries    search, multi-value filters, sort, paged
               PUT  /api/entries/<id>, DELETE /api/entries/<id>
               POST /api/import     paste TSV in bulk
               GET  /api/stats
@@ -26,6 +26,7 @@ authentication -- it travels in cleartext over HTTP on a home network.
 """
 import json
 import os
+import unicodedata
 import random
 import re
 import secrets
@@ -247,8 +248,14 @@ def reshape_daily(store):
                             if not e["known"] and e["id"] not in kept])
         kept += [claim(e) for e in pool[:total - len(kept)]]
 
-    random.shuffle(kept)  # re-interleave the two types
-    changed = kept != store["daily"]["ids"]
+    # Only re-interleave when the membership actually moved. Shuffling unconditionally
+    # made `changed` true on every progress report, so the set's order churned and the
+    # store was rewritten several times a minute for nothing.
+    changed = sorted(kept) != sorted(store["daily"]["ids"])
+    if changed:
+        random.shuffle(kept)
+    else:
+        kept = store["daily"]["ids"]
     store["daily"]["ids"] = kept
     return changed
 
@@ -256,6 +263,68 @@ def reshape_daily(store):
 def daily_cards(store):
     by_id = {e["id"]: e for e in store["entries"]}
     return [by_id[i] for i in store["daily"]["ids"] if i in by_id]
+
+
+# ------------------------------------------------------------------------------ querying
+
+SEARCH_TOKEN = re.compile(
+    r'(-?)(?:(front|back|ex|example|any):)?(?:"([^"]*)"|(\S+))', re.IGNORECASE)
+
+FIELD_ALIASES = {"front": ("front",), "back": ("back",), "ex": ("example",),
+                 "example": ("example",), "any": ("front", "back", "example")}
+
+SORT_KEYS = ("id", "front", "back", "days", "seen", "level", "type", "updated")
+
+
+def fold(text):
+    """Accent- and case-insensitive form, for both searching and sorting.
+
+    Searching for "tiep can" should find "tiếp cận" -- typing Vietnamese diacritics to
+    look something up is exactly the friction this tool exists to remove. Decomposing and
+    dropping the combining marks also makes sorting put "ăn" next to "an" instead of after
+    "z", which is where raw code points would leave it.
+    """
+    decomposed = unicodedata.normalize("NFD", text.casefold())
+    return "".join(c for c in decomposed if not unicodedata.combining(c))
+
+
+def parse_search(query):
+    """Splits a search box into AND-ed terms.
+
+    Supports `front:afford` to scope a term to one field, `"tiếp cận"` to keep a phrase
+    together, and a leading `-` to exclude. Everything is AND-ed: narrowing a search by
+    adding a word is the behaviour people already expect from every other search box.
+    """
+    terms = []
+    for negate, field, quoted, bare in SEARCH_TOKEN.findall(query or ""):
+        needle = quoted if quoted else bare
+        if not needle.strip():
+            continue
+        fields = FIELD_ALIASES.get((field or "any").lower(), FIELD_ALIASES["any"])
+        terms.append((bool(negate), fields, fold(needle)))
+    return terms
+
+
+def matches_search(entry, terms):
+    for negate, fields, needle in terms:
+        hit = any(needle in fold(entry[f]) for f in fields)
+        if hit == negate:
+            return False
+    return True
+
+
+def csv_param(values):
+    """Multi-value filters arrive as `type=word,structure` or repeated parameters."""
+    out = set()
+    for value in values or []:
+        out |= {v.strip() for v in value.split(",") if v.strip()}
+    return out
+
+
+def status_of(entry):
+    if entry["known"]:
+        return "known"
+    return "unseen" if entry["days"] == 0 else "learning"
 
 
 def stats(entries):
@@ -372,35 +441,58 @@ class Handler(BaseHTTPRequestHandler):
                 })
 
             if route == "/api/entries":
-                q = (self.query.get("q", [""])[0] or "").strip().lower()
-                kind = self.query.get("type", [""])[0]
-                status = self.query.get("status", [""])[0]
                 rows = store["entries"]
-                if q:
-                    rows = [e for e in rows if q in e["front"].lower()
-                            or q in e["back"].lower() or q in e["example"].lower()]
-                if kind in TYPES:
-                    rows = [e for e in rows if e["type"] == kind]
-                if status == "known":
-                    rows = [e for e in rows if e["known"]]
-                elif status == "learning":
-                    rows = [e for e in rows if not e["known"] and e["seen"] > 0]
-                elif status == "unseen":
-                    rows = [e for e in rows if not e["known"] and e["seen"] == 0]
-                rows = sorted(rows, key=lambda e: e["id"])
+                terms = parse_search(self.query.get("q", [""])[0])
+                if terms:
+                    rows = [e for e in rows if matches_search(e, terms)]
+
+                kinds = csv_param(self.query.get("type"))
+                if kinds:
+                    rows = [e for e in rows if e["type"] in kinds]
+                levels = csv_param(self.query.get("level"))
+                if levels:
+                    rows = [e for e in rows if e["level"] in levels]
+                statuses = csv_param(self.query.get("status"))
+                if statuses:
+                    rows = [e for e in rows if status_of(e) in statuses]
+                if self.query.get("daily", [""])[0] == "1":
+                    today = set(store["daily"]["ids"])
+                    rows = [e for e in rows if e["id"] in today]
+
+                sort = self.query.get("sort", ["id"])[0]
+                if sort not in SORT_KEYS:
+                    sort = "id"
+                descending = self.query.get("dir", ["asc"])[0] == "desc"
+                # Text columns sort folded so Vietnamese lands alphabetically; the id is
+                # always the tie-break so equal values keep a stable, repeatable order
+                # across pages rather than shuffling between requests.
+                if sort in ("front", "back", "level", "type"):
+                    key = lambda e: (fold(e[sort]), e["id"])
+                elif sort == "updated":
+                    key = lambda e: (e["updated"], e["id"])
+                else:
+                    key = lambda e: (e[sort], e["id"])
+                rows = sorted(rows, key=key, reverse=descending)
 
                 # Paged server-side rather than in the browser: the deck is meant to grow,
                 # and shipping every row to render fifty of them gets slower for no reason.
-                per = max(1, min(200, int(self.query.get("per", [50])[0])))
+                per = max(1, min(500, int(self.query.get("per", [50])[0])))
                 pages = max(1, (len(rows) + per - 1) // per)
                 page = max(1, min(pages, int(self.query.get("page", [1])[0])))
                 start = (page - 1) * per
+                window = rows[start:start + per]
+                today = set(store["daily"]["ids"])
                 return self.send_json({
-                    "entries": rows[start:start + per],
+                    "entries": [dict(e, status=status_of(e), today=e["id"] in today)
+                                for e in window],
                     "matched": len(rows),
                     "page": page,
                     "pages": pages,
                     "per": per,
+                    "from": start + 1 if window else 0,
+                    "to": start + len(window),
+                    "sort": sort,
+                    "dir": "desc" if descending else "asc",
                 })
 
         self.send_json({"error": "not found"}, 404)

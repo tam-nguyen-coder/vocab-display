@@ -5,8 +5,11 @@
 // Nothing needs pressing: the pause on the front is there to give you a moment to recall
 // the answer before it appears, which is a better loop than showing both halves at once.
 //
-// Button 1 (GPIO 35) advances -- flip, or next card if already flipped.
-// Button 2 (GPIO 0) marks the entry known so it never returns; hold it for the backlight.
+// Button 1 (GPIO 35) advances -- flip, or next card if already flipped. Hold it to turn
+// the screen around.
+// Button 2 (GPIO 0) toggles the backlight; *holding* it marks the entry known so it never
+// returns. The destructive action is behind the deliberate gesture on purpose -- see
+// readButtons().
 //
 // The deck compiled into flash is the floor, not the plan: the board shows cards on power
 // alone, and Wi-Fi only adds to that. When the host answers, the board runs from batches
@@ -187,11 +190,30 @@ uint32_t sideStartedMs = 0;
 bool needsRender = true;
 
 bool backlightOn = true;
+// Sampled in setup() rather than assumed. GPIO 0 is the boot-strap pin that esptool
+// holds LOW to enter the bootloader, so straight after a flash the pin is still LOW while
+// this said HIGH -- the release that followed looked exactly like a deliberate short
+// press and marked whatever card was on screen as known. Every flash cost a word.
 bool lastAdvanceButton = HIGH;
 bool lastKnownButton = HIGH;
+// Zero means "no press was seen", which is the guard that makes a lone rising edge
+// unactionable no matter where it came from.
 uint32_t knownPressedAt = 0;
 uint32_t advancePressedAt = 0;
-static const uint32_t HOLD_MS = 600;
+// Nothing is acted on until the pins have settled. Belt to the above braces: a strap pin
+// shared with the bootloader is not a clean button and does not deserve to be trusted in
+// the first moments of a boot.
+static const uint32_t BUTTONS_SETTLE_MS = 1500;
+// A press has to last this long to count. Guarding only the release was not enough: a
+// microsecond glitch on a strap pin produces a perfectly well-formed press-then-release
+// and reads as a deliberate tap. No human press is shorter than this, and no electrical
+// transient is longer.
+static const uint32_t MIN_PRESS_MS = 40;
+// Marking an entry known removes it from the deck, and it sits on GPIO 0 -- a strap pin
+// shared with the bootloader that is driven by the USB bridge's DTR line. Spurious pulses
+// on it are a fact of the hardware, not a bug to be filtered away, so the destructive
+// action needs a hold rather than a tap.
+static const uint32_t KNOWN_HOLD_MS = 800;
 // Longer than the backlight hold, because advancing is the button's everyday job and a
 // stray long press should not spin the screen around.
 static const uint32_t ROTATE_HOLD_MS = 1500;
@@ -358,7 +380,13 @@ static void reportProgress() {
     // taking the larger seen count and never un-setting known, so repeating a delta is
     // harmless -- but a mark made while the host is asleep is lost if the board reboots
     // before it syncs. The word simply comes back around to be marked again.
-    for (uint16_t i = 0; i < cardCount; i++) cards[i].seen = 0;
+    // Both flags are cleared, not just the count. Leaving `known` set meant one press --
+    // or one phantom pulse -- was re-asserted on every later report, so un-ticking the
+    // entry in the web UI just saw the board set it again a few cards later.
+    for (uint16_t i = 0; i < cardCount; i++) {
+      cards[i].seen = 0;
+      cards[i].known = false;
+    }
   } else {
     reportBackoffUntilMs = millis() + REPORT_BACKOFF_MS;
   }
@@ -644,14 +672,26 @@ static void renderCard() {
 // ------------------------------------------------------------------------------ buttons
 
 static void readButtons() {
+  if (millis() < BUTTONS_SETTLE_MS) {
+    // Track the levels through the settling window so the first real edge afterwards is
+    // measured from a truthful starting point rather than producing a phantom one.
+    lastAdvanceButton = digitalRead(BUTTON_ADVANCE);
+    lastKnownButton = digitalRead(BUTTON_KNOWN);
+    return;
+  }
+
   // Acts on release rather than press so a short tap and a long hold can be told apart.
   // The delay is imperceptible for a tap and it is what makes the rotate gesture possible
   // without stealing a whole button.
   bool advance = digitalRead(BUTTON_ADVANCE);
   if (lastAdvanceButton == HIGH && advance == LOW) {
     advancePressedAt = millis();
-  } else if (lastAdvanceButton == LOW && advance == HIGH) {
-    if (millis() - advancePressedAt >= ROTATE_HOLD_MS) {
+  } else if (lastAdvanceButton == LOW && advance == HIGH && advancePressedAt) {
+    uint32_t held = millis() - advancePressedAt;
+    advancePressedAt = 0;
+    if (held < MIN_PRESS_MS) {
+      // too short to be a finger
+    } else if (held >= ROTATE_HOLD_MS) {
       applyRotation(rotation == 1 ? 3 : 1);
     } else if (!showingBack && cardCount > 0) {
       showingBack = true;
@@ -666,12 +706,21 @@ static void readButtons() {
   bool known = digitalRead(BUTTON_KNOWN);
   if (lastKnownButton == HIGH && known == LOW) {
     knownPressedAt = millis();
-  } else if (lastKnownButton == LOW && known == HIGH) {
-    if (millis() - knownPressedAt >= HOLD_MS) {
+  } else if (lastKnownButton == LOW && known == HIGH && knownPressedAt) {
+    uint32_t held = millis() - knownPressedAt;
+    knownPressedAt = 0;
+    if (held < MIN_PRESS_MS) {
+      Serial.printf("[button] ignored a %ums pulse on GPIO 0\n", held);
+    } else if (held >= KNOWN_HOLD_MS) {
+      markKnown();
+    } else {
+      // A tap only moves the backlight. Guards on pulse length were tried first and a
+      // spurious mark still got through -- the pulse this bridge produces on port open is
+      // longer than any threshold a real finger could sit above. So the mapping changed
+      // instead: whatever the hardware does to this pin, the worst outcome is now a
+      // blinking backlight rather than a word silently deleted from the deck.
       backlightOn = !backlightOn;
       digitalWrite(TFT_BL, backlightOn ? TFT_BACKLIGHT_ON : !TFT_BACKLIGHT_ON);
-    } else {
-      markKnown();
     }
   }
   lastKnownButton = known;
@@ -754,6 +803,8 @@ void setup() {
 
   pinMode(PIN_TOP, INPUT);            // input-only, pulled up on the board
   pinMode(PIN_BOTTOM, INPUT_PULLUP);  // boot strap pin, needs the internal pull-up
+  lastAdvanceButton = digitalRead(BUTTON_ADVANCE);
+  lastKnownButton = digitalRead(BUTTON_KNOWN);
   pinMode(TFT_BL, OUTPUT);
   digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
 

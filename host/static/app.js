@@ -2,9 +2,25 @@
 
 const $ = (id) => document.getElementById(id);
 const rowsEl = $("rows");
+
+// Every control writes here and the URL mirrors it, so a filtered view survives a reload,
+// can be bookmarked, and gets browser back/forward for nothing. localStorage would have
+// persisted the state too but none of the rest.
+const state = {
+  q: "",
+  type: new Set(),
+  level: new Set(),
+  status: new Set(),
+  daily: false,
+  sort: "id",
+  dir: "asc",
+  per: 50,
+  page: 1,
+};
+
+const MULTI = ["type", "level", "status"];
 let entries = [];
-let page = 1;
-const PER_PAGE = 50;
+let inFlight = 0;
 
 // ---------------------------------------------------------------------------- plumbing
 
@@ -24,7 +40,7 @@ function toast(message) {
   el.textContent = message;
   el.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove("show"), 1800);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 1900);
 }
 
 function debounce(fn, ms) {
@@ -35,6 +51,65 @@ function debounce(fn, ms) {
   };
 }
 
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// ------------------------------------------------------------------------- url <-> state
+
+function stateToParams() {
+  const p = new URLSearchParams();
+  if (state.q) p.set("q", state.q);
+  for (const key of MULTI) {
+    if (state[key].size) p.set(key, [...state[key]].join(","));
+  }
+  if (state.daily) p.set("daily", "1");
+  if (state.sort !== "id") p.set("sort", state.sort);
+  if (state.dir !== "asc") p.set("dir", state.dir);
+  if (state.per !== 50) p.set("per", state.per);
+  if (state.page !== 1) p.set("page", state.page);
+  return p;
+}
+
+function readUrl() {
+  const p = new URLSearchParams(location.search);
+  state.q = p.get("q") || "";
+  for (const key of MULTI) {
+    state[key] = new Set((p.get(key) || "").split(",").filter(Boolean));
+  }
+  state.daily = p.get("daily") === "1";
+  state.sort = p.get("sort") || "id";
+  state.dir = p.get("dir") === "desc" ? "desc" : "asc";
+  state.per = Number(p.get("per")) || 50;
+  state.page = Number(p.get("page")) || 1;
+}
+
+function writeUrl() {
+  const query = stateToParams().toString();
+  history.replaceState(null, "", query ? `?${query}` : location.pathname);
+}
+
+function syncControls() {
+  $("search").value = state.q;
+  $("per").value = String(state.per);
+  for (const group of document.querySelectorAll(".group")) {
+    const key = group.dataset.key;
+    for (const pill of group.querySelectorAll(".pill")) {
+      const on = key === "daily" ? state.daily : state[key].has(pill.dataset.value);
+      pill.classList.toggle("on", on);
+      pill.setAttribute("aria-pressed", on ? "true" : "false");
+    }
+  }
+  for (const th of document.querySelectorAll("th.sortable")) {
+    const active = th.dataset.sort === state.sort;
+    th.classList.toggle("sorted", active);
+    th.dataset.dir = active ? state.dir : "";
+  }
+  const filtered = state.q || state.daily || MULTI.some((k) => state[k].size);
+  $("clear-filters").hidden = !filtered;
+}
+
 // ------------------------------------------------------------------------------ render
 
 const STAT_LABELS = [
@@ -43,13 +118,13 @@ const STAT_LABELS = [
   ["unseen", "chưa học ngày nào", false],
   ["total", "tổng", false],
   ["words", "từ", false],
-  ["structures", "cấu trúc", false],
+  ["structures", "cụm", false],
 ];
 
 function renderToday(daily, config) {
   $("today-date").textContent = daily.date || "—";
-  // Only overwrite the inputs when they are not being typed into, or applying a value
-  // would fight the caret on every background refresh.
+  // Only overwrite the inputs when they are not being typed into, or a background refresh
+  // would fight the caret.
   for (const [id, key] of [["cfg-words", "daily_words"], ["cfg-structures", "daily_structures"]]) {
     if (document.activeElement !== $(id)) $(id).value = config[key];
   }
@@ -68,60 +143,114 @@ async function loadStats() {
   renderToday(daily, config);
 }
 
-function escapeHtml(s) {
-  return s.replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// Accent- and case-insensitive, matching how the server searches -- highlighting only the
+// literal typed form would leave "tiep can" matching a row with nothing marked on it.
+function fold(text) {
+  return text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 }
+
+const FIELD_SCOPE = { front: ["front"], back: ["back"], ex: ["example"],
+                      example: ["example"], any: ["front", "back", "example"] };
+
+// `field` matters: searching `front:used` and then marking "used" everywhere would claim
+// the example column matched when the query never looked at it.
+function highlight(text, field) {
+  const needles = [...(state.q.matchAll(
+      /(-?)(?:(front|back|ex|example|any):)?(?:"([^"]*)"|(\S+))/gi))]
+    .filter((m) => !m[1])
+    .filter((m) => (FIELD_SCOPE[(m[2] || "any").toLowerCase()] || []).includes(field))
+    .map((m) => m[3] ?? m[4] ?? "")
+    .filter(Boolean)
+    .map(fold);
+  if (!needles.length) return escapeHtml(text);
+
+  const folded = fold(text);
+  const marks = new Array(text.length).fill(false);
+  for (const needle of needles) {
+    let at = folded.indexOf(needle);
+    while (at !== -1) {
+      // Folding strips combining marks, so folded and raw indices only line up while the
+      // text has none. Clamp rather than risk marking past the end.
+      for (let i = at; i < Math.min(at + needle.length, marks.length); i++) marks[i] = true;
+      at = folded.indexOf(needle, at + needle.length);
+    }
+  }
+
+  let out = "";
+  for (let i = 0; i < text.length; i++) {
+    const start = marks[i] && !marks[i - 1];
+    const end = marks[i] && !marks[i + 1];
+    out += (start ? "<mark>" : "") + escapeHtml(text[i]) + (end ? "</mark>" : "");
+  }
+  return out;
+}
+
+const STATUS_LABEL = { unseen: "chưa học", learning: "đang học", known: "đã biết" };
 
 function rowHtml(e) {
   const nextType = e.type === "word" ? "structure" : "word";
-  return `<tr data-id="${e.id}"${e.known ? ' class="known"' : ""}>
+  return `<tr data-id="${e.id}" class="${e.known ? "known" : ""}${e.today ? " today" : ""}">
     <td class="id">${e.id}</td>
-    <td><span class="badge ${e.type}" data-set-type="${nextType}" title="Đổi loại"
-        >${e.type === "word" ? "từ" : "cấu trúc"}</span></td>
-    <td><input class="cell front" value="${escapeHtml(e.front)}" data-field="front"></td>
-    <td><input class="cell back" value="${escapeHtml(e.back)}" data-field="back"></td>
-    <td><input class="cell example" value="${escapeHtml(e.example)}" data-field="example"></td>
-    <td class="seen">${e.days}</td>
-    <td class="seen">${e.seen}</td>
-    <td style="text-align:center"><input type="checkbox" data-field="known"
-        ${e.known ? "checked" : ""}></td>
+    <td>
+      <span class="badge ${e.type}" data-set-type="${nextType}" title="Đổi loại"
+        >${e.type === "word" ? "từ" : "cụm"}</span>
+      <span class="badge level" data-cycle-level title="Đổi trình độ">${e.level}</span>
+    </td>
+    <td><div class="cellwrap"><input class="cell front" value="${escapeHtml(e.front)}"
+        data-field="front" aria-label="từ"><div class="hl front"
+        >${highlight(e.front, "front")}</div></div></td>
+    <td><div class="cellwrap"><input class="cell back" value="${escapeHtml(e.back)}"
+        data-field="back" aria-label="nghĩa"><div class="hl back"
+        >${highlight(e.back, "back")}</div></div></td>
+    <td><div class="cellwrap"><input class="cell example" value="${escapeHtml(e.example)}"
+        data-field="example" aria-label="ví dụ"><div class="hl example"
+        >${highlight(e.example, "example")}</div></div></td>
+    <td class="num">${e.days}</td>
+    <td class="num dim">${e.seen}</td>
+    <td class="num"><input type="checkbox" data-field="known" ${e.known ? "checked" : ""}
+        title="${STATUS_LABEL[e.status]}"></td>
     <td class="actions"><button class="icon" data-delete title="Xoá">&times;</button></td>
   </tr>`;
 }
 
 async function loadEntries() {
-  const params = new URLSearchParams({
-    q: $("search").value,
-    type: $("filter-type").value,
-    status: $("filter-status").value,
-    page: page,
-    per: PER_PAGE,
-  });
-  const data = await api(`/api/entries?${params}`);
+  const token = ++inFlight;
+  $("table").classList.add("busy");
+  const data = await api(`/api/entries?${stateToParams()}`);
+  // A slow response for an older query must not overwrite a newer one -- typing fast in
+  // the search box otherwise lands whichever request happens to finish last.
+  if (token !== inFlight) return;
+  $("table").classList.remove("busy");
+
   entries = data.entries;
-  // The server clamps the page to what exists, so follow it back rather than keeping a
-  // number that no longer has rows -- deleting the last row of the last page otherwise
-  // leaves an empty table with no way back.
-  page = data.page;
+  // The server clamps the page to what exists; follow it back, or deleting the last row
+  // of the last page leaves an empty table with no way out.
+  state.page = data.page;
+  state.sort = data.sort;
+  state.dir = data.dir;
+
   rowsEl.innerHTML = entries.map(rowHtml).join("");
   $("empty").hidden = entries.length > 0;
+  $("empty").textContent = state.q || state.daily || MULTI.some((k) => state[k].size)
+    ? "Không có entry nào khớp bộ lọc."
+    : "Kho từ đang trống.";
 
   $("pager").hidden = data.matched === 0;
   $("pager-info").textContent =
-    `Trang ${data.page}/${data.pages} · ${data.matched} kết quả`;
+    `${data.from}–${data.to} / ${data.matched}` +
+    (data.pages > 1 ? `  ·  trang ${data.page}/${data.pages}` : "");
   $("prev").disabled = data.page <= 1;
   $("next").disabled = data.page >= data.pages;
+
+  syncControls();
+  writeUrl();
 }
 
-function goToPage(next) {
-  page = next;
+const refresh = () => Promise.all([loadEntries(), loadStats()]);
+
+function apply({ resetPage = true } = {}) {
+  if (resetPage) state.page = 1;
   loadEntries().catch((err) => toast(err.message));
-  window.scrollTo({ top: 0, behavior: "smooth" });
-}
-
-async function refresh() {
-  await Promise.all([loadEntries(), loadStats()]);
 }
 
 // ------------------------------------------------------------------------------- edits
@@ -133,43 +262,47 @@ async function save(id, patch, cell) {
   } catch (err) {
     toast(`Không lưu được: ${err.message}`);
     await refresh();
-    return;
   } finally {
     if (cell) cell.classList.remove("saving");
   }
 }
 
-// One listener on the tbody rather than per row: rows are replaced wholesale on every
-// filter change, and re-attaching handlers each time is how stale listeners accumulate.
+// One listener on the tbody: rows are replaced wholesale on every filter change, and
+// re-attaching handlers each time is how stale listeners accumulate.
 rowsEl.addEventListener("change", async (event) => {
   const row = event.target.closest("tr");
-  if (!row) return;
-  const id = Number(row.dataset.id);
   const field = event.target.dataset.field;
-  if (!field) return;
+  if (!row || !field) return;
+  const id = Number(row.dataset.id);
 
   if (field === "known") {
     await save(id, { known: event.target.checked });
-    await refresh();  // affects the counts and the row's dimming
+    await refresh();  // moves the counts, the row's dimming, and maybe today's set
   } else {
     await save(id, { [field]: event.target.value }, event.target);
+    event.target.nextElementSibling.innerHTML = highlight(event.target.value, field);
     await loadStats();
   }
 });
+
+const LEVELS = ["A2", "B1", "B2"];
 
 rowsEl.addEventListener("click", async (event) => {
   const row = event.target.closest("tr");
   if (!row) return;
   const id = Number(row.dataset.id);
+  const entry = entries.find((e) => e.id === id);
 
-  const newType = event.target.dataset.setType;
-  if (newType) {
-    await save(id, { type: newType });
-    return refresh();
+  if (event.target.dataset.setType) {
+    await save(id, { type: event.target.dataset.setType });
+    return apply({ resetPage: false });
   }
-
+  if (event.target.hasAttribute("data-cycle-level")) {
+    const next = LEVELS[(LEVELS.indexOf(entry.level) + 1) % LEVELS.length];
+    await save(id, { level: next });
+    return apply({ resetPage: false });
+  }
   if (event.target.hasAttribute("data-delete")) {
-    const entry = entries.find((e) => e.id === id);
     if (!confirm(`Xoá "${entry.front}"? Không hoàn lại được.`)) return;
     await api(`/api/entries/${id}`, { method: "DELETE" });
     toast(`Đã xoá "${entry.front}"`);
@@ -177,9 +310,99 @@ rowsEl.addEventListener("click", async (event) => {
   }
 });
 
-// Enter commits without waiting for blur, which is how anyone edits a table quickly.
+// Swapped by a class on focus rather than by a CSS sibling selector. The selector version
+// silently did nothing -- the highlight layer stayed visible over a focused input, and the
+// input's own glyphs stayed transparent, because the transparency rule and the focus rule
+// ended up at the same specificity with the wrong one last. A class is unambiguous.
+rowsEl.addEventListener("focusin", (event) => {
+  if (event.target.classList.contains("cell")) event.target.parentElement.classList.add("editing");
+});
+rowsEl.addEventListener("focusout", (event) => {
+  if (event.target.classList.contains("cell")) event.target.parentElement.classList.remove("editing");
+});
+
+// Enter commits without waiting for blur, Escape abandons the edit -- both are what
+// anyone editing a table quickly reaches for.
 rowsEl.addEventListener("keydown", (event) => {
-  if (event.key === "Enter" && event.target.classList.contains("cell")) event.target.blur();
+  if (!event.target.classList.contains("cell")) return;
+  if (event.key === "Enter") event.target.blur();
+  if (event.key === "Escape") {
+    const id = Number(event.target.closest("tr").dataset.id);
+    const entry = entries.find((e) => e.id === id);
+    event.target.value = entry[event.target.dataset.field];
+    event.target.blur();
+  }
+});
+
+// ------------------------------------------------------------------ filters, sort, pages
+
+document.querySelector(".filters").addEventListener("click", (event) => {
+  const pill = event.target.closest(".pill");
+  if (!pill) return;
+  const key = pill.closest(".group").dataset.key;
+  if (key === "daily") state.daily = !state.daily;
+  else state[key].has(pill.dataset.value)
+    ? state[key].delete(pill.dataset.value)
+    : state[key].add(pill.dataset.value);
+  syncControls();
+  apply();
+});
+
+$("clear-filters").addEventListener("click", () => {
+  state.q = "";
+  for (const key of MULTI) state[key].clear();
+  state.daily = false;
+  syncControls();
+  apply();
+});
+
+document.querySelector("thead").addEventListener("click", (event) => {
+  const th = event.target.closest("th.sortable");
+  if (!th) return;
+  // Clicking the active column flips direction; a new column starts ascending, except the
+  // two counters where "most" is the interesting end.
+  if (state.sort === th.dataset.sort) {
+    state.dir = state.dir === "asc" ? "desc" : "asc";
+  } else {
+    state.sort = th.dataset.sort;
+    state.dir = ["days", "seen"].includes(state.sort) ? "desc" : "asc";
+  }
+  syncControls();
+  apply();
+});
+
+$("search").addEventListener("input", debounce(() => {
+  state.q = $("search").value;
+  apply();
+}, 200));
+
+$("per").addEventListener("change", () => {
+  state.per = Number($("per").value);
+  apply();
+});
+$("prev").addEventListener("click", () => { state.page--; apply({ resetPage: false }); });
+$("next").addEventListener("click", () => { state.page++; apply({ resetPage: false }); });
+$("search-help-toggle").addEventListener("click", () => {
+  $("search-help").hidden = !$("search-help").hidden;
+});
+
+// "/" to search and Escape to clear it, as long as focus is not already in a field.
+document.addEventListener("keydown", (event) => {
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+  if (event.key === "/" && !typing) {
+    event.preventDefault();
+    $("search").focus();
+  } else if (event.key === "Escape" && document.activeElement === $("search")) {
+    $("search").value = "";
+    state.q = "";
+    apply();
+  }
+});
+
+window.addEventListener("popstate", () => {
+  readUrl();
+  syncControls();
+  loadEntries().catch((err) => toast(err.message));
 });
 
 // -------------------------------------------------------------------------- add, import
@@ -250,13 +473,6 @@ $("rebuild").addEventListener("click", async () => {
   await refresh();
 });
 
-// ------------------------------------------------------------------------------- filters
-
-const refilter = () => { page = 1; return loadEntries(); };
-$("search").addEventListener("input", debounce(refilter, 180));
-$("filter-type").addEventListener("change", refilter);
-$("filter-status").addEventListener("change", refilter);
-$("prev").addEventListener("click", () => goToPage(page - 1));
-$("next").addEventListener("click", () => goToPage(page + 1));
-
+readUrl();
+syncControls();
 refresh().catch((err) => toast(`Không tải được: ${err.message}`));

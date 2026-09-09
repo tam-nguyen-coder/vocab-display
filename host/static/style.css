@@ -258,3 +258,148 @@ td.actions { width: 34px; text-align: center; }
 }
 .toast.show { opacity: 1; }
 [hidden] { display: none !important; }
+
+/* ------------------------------------------------------------------ controls, filters */
+
+.controls {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 24px 14px;
+  margin-top: 14px;
+}
+.controls .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.controls .row + .row { margin-top: 10px; }
+
+.search-wrap { position: relative; display: flex; align-items: center; }
+.search-wrap input[type="search"] { min-width: 300px; padding-right: 30px; }
+.slash {
+  position: absolute;
+  right: 8px;
+  font: 11px/1 ui-monospace, Menlo, monospace;
+  color: var(--faint);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  padding: 3px 5px;
+  pointer-events: none;
+}
+.search-wrap input:focus + .slash { opacity: 0; }
+
+.help {
+  margin: 10px 0 0;
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 1.7;
+  max-width: 90ch;
+}
+.help code {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 11.5px;
+}
+
+.filters { row-gap: 10px; }
+.group { display: flex; align-items: center; gap: 5px; }
+.group + .group { margin-left: 14px; }
+.glabel { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-right: 3px; }
+
+.pill {
+  border: 1px solid var(--border-strong);
+  background: var(--panel);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.pill:hover { border-color: var(--accent); color: var(--accent); }
+.pill.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 550;
+}
+.pill.on:hover { color: #fff; filter: brightness(1.08); }
+
+button.ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--dim);
+  padding: 6px 10px;
+}
+button.ghost:hover { color: var(--accent); border-color: var(--border-strong); }
+
+/* ------------------------------------------------------------------- sorting, table */
+
+col.c-num { width: 58px; }
+
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: var(--accent); }
+th.sortable::after {
+  content: "";
+  display: inline-block;
+  margin-left: 5px;
+  border: 4px solid transparent;
+  vertical-align: 1px;
+  opacity: 0;
+}
+th.sortable:hover::after { opacity: 0.35; border-bottom-color: currentColor; border-top-width: 0; }
+th.sorted { color: var(--accent); }
+th.sorted[data-dir="asc"]::after { opacity: 1; border-bottom-color: currentColor; border-top-width: 0; }
+th.sorted[data-dir="desc"]::after { opacity: 1; border-top-color: currentColor; border-bottom-width: 0; }
+th.num, td.num { text-align: center; }
+
+table.busy tbody { opacity: 0.45; transition: opacity 0.12s; }
+
+tbody tr.today { box-shadow: inset 3px 0 0 var(--accent); }
+td.num { color: var(--text); font-variant-numeric: tabular-nums; font-size: 13px; }
+td.num.dim { color: var(--faint); }
+
+/* A plain div is the positioning context, not the <td>: table cells are unreliable
+   containing blocks for absolutely positioned children -- with position:relative on the
+   td, the layer landed 6px left and 10px above the input's text in this engine. */
+.cellwrap { position: relative; }
+.hl {
+  position: absolute;
+  inset: 0;
+  /* Matches the input's border plus padding, so the two copies of the text share a
+     baseline and nothing shifts when the cell is focused. */
+  padding: 6px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  line-height: 1.5;
+}
+.hl.back { color: var(--accent); }
+.hl.example { color: var(--dim); font-size: 13px; }
+
+/* While not editing, the input's own glyphs are transparent so only the highlight layer
+   is seen; the caret stays visible so clicking still puts you where you clicked. */
+.cell.front, .cell.back, .cell.example {
+  color: transparent;
+  caret-color: var(--accent);
+  background: transparent;
+}
+.cellwrap.editing .hl { display: none; }
+.cellwrap.editing .cell.front { color: var(--text); }
+.cellwrap.editing .cell.back { color: var(--accent); }
+.cellwrap.editing .cell.example { color: var(--dim); }
+.cellwrap.editing .cell { background: var(--panel); }
+
+mark { background: #ffe08a; color: #1c1b1a; border-radius: 2px; padding: 0 1px; }
+@media (prefers-color-scheme: dark) {
+  mark { background: #6b4d12; color: #ffe9b8; }
+}
+
+.pager-per { margin-left: 18px; color: var(--dim); font-size: 12.5px; }
+.pager-per select {
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 4px 6px;
+  margin-left: 4px;
+}
