@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="vi">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -11,7 +11,7 @@
 <header>
   <div class="title">
     <h1>vocab-display</h1>
-    <span class="subtitle">kho từ vựng của thiết bị trên bàn</span>
+    <span class="subtitle">the deck behind the device on your desk</span>
     <span class="spacer"></span>
     <span class="token">token <b id="token">…</b></span>
   </div>
@@ -20,86 +20,86 @@
 
 <section class="today">
   <div class="today-head">
-    <h2>Tập hôm nay <span class="date" id="today-date">…</span></h2>
+    <h2>Today's set <span class="date" id="today-date">…</span></h2>
     <span class="spacer"></span>
-    <label>từ <input type="number" id="cfg-words" min="0" max="60" step="1"></label>
-    <label>cụm <input type="number" id="cfg-structures" min="0" max="60" step="1"></label>
-    <button id="cfg-apply">Áp dụng</button>
-    <button id="rebuild">Chọn lại</button>
+    <label>words <input type="number" id="cfg-words" min="0" max="60" step="1"></label>
+    <label>structures <input type="number" id="cfg-structures" min="0" max="60" step="1"></label>
+    <button id="cfg-apply">Apply</button>
+    <button id="rebuild">Draw again</button>
   </div>
-  <p class="hint">Board lặp đúng tập này suốt cả ngày; mai sẽ là tập khác.</p>
+  <p class="hint">The device repeats this set all day; tomorrow draws a different one.</p>
   <div class="chips" id="today-chips"></div>
 </section>
 
 <section class="controls">
   <div class="row">
     <div class="search-wrap">
-      <input type="search" id="search" placeholder="Tìm từ, nghĩa hoặc ví dụ…" autocomplete="off" spellcheck="false">
+      <input type="search" id="search" placeholder="Search terms, meanings, examples…" autocomplete="off" spellcheck="false">
       <kbd class="slash">/</kbd>
     </div>
-    <button class="ghost" id="search-help-toggle" title="Cú pháp tìm kiếm">?</button>
+    <button class="ghost" id="search-help-toggle" title="Search syntax">?</button>
     <span class="spacer"></span>
-    <button id="toggle-add">Thêm từ</button>
-    <button id="toggle-import">Nhập hàng loạt</button>
+    <button id="toggle-add">Add entry</button>
+    <button id="toggle-import">Bulk import</button>
   </div>
 
   <p class="help" id="search-help" hidden>
-    Gõ nhiều từ để thu hẹp dần — tất cả đều phải khớp. Không cần dấu:
-    <code>tiep can</code> tìm ra <code>tiếp cận</code>.
-    <code>front:used</code> chỉ tìm trong cột từ (<code>back:</code>, <code>ex:</code> tương tự).
-    <code>"the more"</code> giữ nguyên cả cụm. <code>-fair</code> loại bỏ.
+    Several words narrow the results — all of them have to match. Accents are optional:
+    <code>tiep can</code> finds <code>tiếp cận</code>.
+    <code>front:used</code> searches one column only (<code>back:</code> and <code>ex:</code> too).
+    <code>"the more"</code> keeps a phrase together. <code>-fair</code> excludes.
   </p>
 
   <div class="row filters">
     <div class="group" id="f-type" data-key="type">
-      <span class="glabel">Loại</span>
-      <button class="pill" data-value="word">từ</button>
-      <button class="pill" data-value="structure">cụm</button>
+      <span class="glabel">Type</span>
+      <button class="pill" data-value="word">word</button>
+      <button class="pill" data-value="structure">structure</button>
     </div>
     <div class="group" id="f-level" data-key="level">
-      <span class="glabel">Trình độ</span>
+      <span class="glabel">Level</span>
       <button class="pill" data-value="A2">A2</button>
       <button class="pill" data-value="B1">B1</button>
       <button class="pill" data-value="B2">B2</button>
     </div>
     <div class="group" id="f-status" data-key="status">
-      <span class="glabel">Trạng thái</span>
-      <button class="pill" data-value="unseen">chưa học</button>
-      <button class="pill" data-value="learning">đang học</button>
-      <button class="pill" data-value="known">đã biết</button>
+      <span class="glabel">Status</span>
+      <button class="pill" data-value="unseen">unseen</button>
+      <button class="pill" data-value="learning">learning</button>
+      <button class="pill" data-value="known">known</button>
     </div>
     <div class="group" id="f-daily" data-key="daily">
-      <button class="pill" data-value="1">chỉ tập hôm nay</button>
+      <button class="pill" data-value="1">today's set only</button>
     </div>
     <span class="spacer"></span>
-    <button class="ghost" id="clear-filters" hidden>Xoá lọc</button>
+    <button class="ghost" id="clear-filters" hidden>Clear filters</button>
   </div>
 </section>
 
 <section class="panel" id="add-panel" hidden>
-  <h2>Thêm một entry</h2>
-  <p>Nghĩa để tiếng Việt. Ví dụ có thể bỏ trống.</p>
+  <h2>Add an entry</h2>
+  <p>Meanings go in Vietnamese. The example is optional.</p>
   <div class="row">
-    <input type="search" id="add-front" placeholder="từ hoặc cụm (tiếng Anh)" style="flex:1">
-    <input type="search" id="add-back" placeholder="nghĩa (tiếng Việt)" style="flex:1">
+    <input type="search" id="add-front" placeholder="term or pattern (English)" style="flex:1">
+    <input type="search" id="add-back" placeholder="meaning (Vietnamese)" style="flex:1">
   </div>
   <div class="row">
-    <input type="search" id="add-example" placeholder="ví dụ (tiếng Anh)" style="flex:1">
-    <select id="add-type"><option value="word">Từ</option><option value="structure">Cụm</option></select>
+    <input type="search" id="add-example" placeholder="example sentence (English)" style="flex:1">
+    <select id="add-type"><option value="word">word</option><option value="structure">structure</option></select>
     <select id="add-level"><option>A2</option><option selected>B1</option><option>B2</option></select>
-    <button class="primary" id="add-submit">Thêm</button>
+    <button class="primary" id="add-submit">Add</button>
   </div>
 </section>
 
 <section class="panel" id="import-panel" hidden>
-  <h2>Nhập hàng loạt</h2>
-  <p>Mỗi dòng một entry, phân cách bằng tab hoặc dấu <code>|</code>:
-     <code>front | back | ví dụ</code>. Dòng bắt đầu bằng <code>#</code> bị bỏ qua.
-     Từ đã có trong kho sẽ bị bỏ, không ghi đè.</p>
+  <h2>Bulk import</h2>
+  <p>One entry per line, separated by a tab or a <code>|</code>:
+     <code>front | back | example</code>. Lines starting with <code>#</code> are skipped.
+     Terms already in the deck are left alone rather than overwritten.</p>
   <textarea id="import-text" spellcheck="false"
     placeholder="reluctant | ngần ngừ, không muốn | She was reluctant to answer.&#10;on behalf of | thay mặt cho | I speak on behalf of the team."></textarea>
   <div class="row">
-    <button class="primary" id="import-submit">Nhập</button>
+    <button class="primary" id="import-submit">Import</button>
     <span id="import-result" class="subtitle"></span>
   </div>
 </section>
@@ -114,13 +114,13 @@
     <thead>
       <tr>
         <th class="sortable num" data-sort="id">id</th>
-        <th class="sortable" data-sort="type">loại</th>
-        <th class="sortable" data-sort="front">từ / cụm</th>
-        <th class="sortable" data-sort="back">nghĩa</th>
-        <th>ví dụ</th>
-        <th class="sortable num" data-sort="days" title="số ngày khác nhau đã xuất hiện">ngày</th>
-        <th class="sortable num" data-sort="seen" title="tổng số lần hiện lên">lần</th>
-        <th class="num">đã biết</th>
+        <th class="sortable" data-sort="type">type</th>
+        <th class="sortable" data-sort="front">term</th>
+        <th class="sortable" data-sort="back">meaning</th>
+        <th>example</th>
+        <th class="sortable num" data-sort="days" title="distinct days this entry has appeared">days</th>
+        <th class="sortable num" data-sort="seen" title="total times it has been shown">shown</th>
+        <th class="num">known</th>
         <th></th>
       </tr>
     </thead>
@@ -128,11 +128,11 @@
   </table>
   <div class="empty" id="empty" hidden></div>
   <nav class="pager" id="pager" hidden>
-    <button id="prev">‹ Trước</button>
+    <button id="prev">‹ Prev</button>
     <span class="pager-info" id="pager-info"></span>
-    <button id="next">Sau ›</button>
+    <button id="next">Next ›</button>
     <span class="pager-per">
-      <label>mỗi trang
+      <label>per page
         <select id="per">
           <option>25</option><option selected>50</option>
           <option>100</option><option>200</option>

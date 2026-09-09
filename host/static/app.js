@@ -113,12 +113,12 @@ function syncControls() {
 // ------------------------------------------------------------------------------ render
 
 const STAT_LABELS = [
-  ["remaining", "còn lại", true],
-  ["known", "đã biết", false],
-  ["unseen", "chưa học ngày nào", false],
-  ["total", "tổng", false],
-  ["words", "từ", false],
-  ["structures", "cụm", false],
+  ["remaining", "left", true],
+  ["known", "known", false],
+  ["unseen", "never shown", false],
+  ["total", "total", false],
+  ["words", "words", false],
+  ["structures", "structures", false],
 ];
 
 function renderToday(daily, config) {
@@ -185,31 +185,31 @@ function highlight(text, field) {
   return out;
 }
 
-const STATUS_LABEL = { unseen: "chưa học", learning: "đang học", known: "đã biết" };
+const STATUS_LABEL = { unseen: "unseen", learning: "learning", known: "known" };
 
 function rowHtml(e) {
   const nextType = e.type === "word" ? "structure" : "word";
   return `<tr data-id="${e.id}" class="${e.known ? "known" : ""}${e.today ? " today" : ""}">
     <td class="id">${e.id}</td>
     <td>
-      <span class="badge ${e.type}" data-set-type="${nextType}" title="Đổi loại"
-        >${e.type === "word" ? "từ" : "cụm"}</span>
-      <span class="badge level" data-cycle-level title="Đổi trình độ">${e.level}</span>
+      <span class="badge ${e.type}" data-set-type="${nextType}" title="Change type"
+        >${e.type === "word" ? "word" : "structure"}</span>
+      <span class="badge level" data-cycle-level title="Cycle level">${e.level}</span>
     </td>
     <td><div class="cellwrap"><input class="cell front" value="${escapeHtml(e.front)}"
-        data-field="front" aria-label="từ"><div class="hl front"
+        data-field="front" aria-label="term"><div class="hl front"
         >${highlight(e.front, "front")}</div></div></td>
     <td><div class="cellwrap"><input class="cell back" value="${escapeHtml(e.back)}"
-        data-field="back" aria-label="nghĩa"><div class="hl back"
+        data-field="back" aria-label="meaning"><div class="hl back"
         >${highlight(e.back, "back")}</div></div></td>
     <td><div class="cellwrap"><input class="cell example" value="${escapeHtml(e.example)}"
-        data-field="example" aria-label="ví dụ"><div class="hl example"
+        data-field="example" aria-label="example"><div class="hl example"
         >${highlight(e.example, "example")}</div></div></td>
     <td class="num">${e.days}</td>
     <td class="num dim">${e.seen}</td>
     <td class="num"><input type="checkbox" data-field="known" ${e.known ? "checked" : ""}
         title="${STATUS_LABEL[e.status]}"></td>
-    <td class="actions"><button class="icon" data-delete title="Xoá">&times;</button></td>
+    <td class="actions"><button class="icon" data-delete title="Delete">&times;</button></td>
   </tr>`;
 }
 
@@ -232,13 +232,13 @@ async function loadEntries() {
   rowsEl.innerHTML = entries.map(rowHtml).join("");
   $("empty").hidden = entries.length > 0;
   $("empty").textContent = state.q || state.daily || MULTI.some((k) => state[k].size)
-    ? "Không có entry nào khớp bộ lọc."
-    : "Kho từ đang trống.";
+    ? "Nothing matches these filters."
+    : "The deck is empty.";
 
   $("pager").hidden = data.matched === 0;
   $("pager-info").textContent =
-    `${data.from}–${data.to} / ${data.matched}` +
-    (data.pages > 1 ? `  ·  trang ${data.page}/${data.pages}` : "");
+    `${data.from}–${data.to} of ${data.matched}` +
+    (data.pages > 1 ? `  ·  page ${data.page}/${data.pages}` : "");
   $("prev").disabled = data.page <= 1;
   $("next").disabled = data.page >= data.pages;
 
@@ -260,7 +260,7 @@ async function save(id, patch, cell) {
   try {
     await api(`/api/entries/${id}`, { method: "PUT", body: JSON.stringify(patch) });
   } catch (err) {
-    toast(`Không lưu được: ${err.message}`);
+    toast(`Could not save: ${err.message}`);
     await refresh();
   } finally {
     if (cell) cell.classList.remove("saving");
@@ -303,9 +303,9 @@ rowsEl.addEventListener("click", async (event) => {
     return apply({ resetPage: false });
   }
   if (event.target.hasAttribute("data-delete")) {
-    if (!confirm(`Xoá "${entry.front}"? Không hoàn lại được.`)) return;
+    if (!confirm(`Delete "${entry.front}"? This cannot be undone.`)) return;
     await api(`/api/entries/${id}`, { method: "DELETE" });
-    toast(`Đã xoá "${entry.front}"`);
+    toast(`Deleted "${entry.front}"`);
     return refresh();
   }
 });
@@ -424,10 +424,10 @@ async function addEntry() {
     type: $("add-type").value,
     level: $("add-level").value,
   };
-  if (!body.front || !body.back) return toast("Cần cả từ và nghĩa");
+  if (!body.front || !body.back) return toast("A term and a meaning are both required");
   try {
     const { entry } = await api("/api/entries", { method: "POST", body: JSON.stringify(body) });
-    toast(`Đã thêm "${entry.front}" (id ${entry.id})`);
+    toast(`Added "${entry.front}" (id ${entry.id})`);
     $("add-front").value = $("add-back").value = $("add-example").value = "";
     $("add-front").focus();
     await refresh();
@@ -443,11 +443,11 @@ for (const id of ["add-front", "add-back", "add-example"]) {
 
 $("import-submit").addEventListener("click", async () => {
   const text = $("import-text").value;
-  if (!text.trim()) return toast("Chưa có gì để nhập");
+  if (!text.trim()) return toast("Nothing to import");
   const result = await api("/api/import", { method: "POST", body: JSON.stringify({ text }) });
-  const parts = [`thêm ${result.added}`];
-  if (result.skipped) parts.push(`bỏ qua ${result.skipped} (đã có)`);
-  if (result.errors.length) parts.push(`${result.errors.length} dòng lỗi`);
+  const parts = [`${result.added} added`];
+  if (result.skipped) parts.push(`${result.skipped} skipped (already there)`);
+  if (result.errors.length) parts.push(`${result.errors.length} bad lines`);
   $("import-result").textContent = parts.join(", ") +
     (result.errors.length ? ` — ${result.errors[0]}` : "");
   if (result.added) $("import-text").value = "";
@@ -462,17 +462,17 @@ $("cfg-apply").addEventListener("click", async () => {
     daily_structures: Number($("cfg-structures").value),
   };
   await api("/api/config", { method: "POST", body: JSON.stringify(body) });
-  toast(`Mỗi ngày ${body.daily_words} từ + ${body.daily_structures} cụm`);
+  toast(`${body.daily_words} words + ${body.daily_structures} structures a day`);
   await refresh();
 });
 
 $("rebuild").addEventListener("click", async () => {
-  if (!confirm("Rút một tập mới cho hôm nay? Tập hiện tại sẽ bị bỏ.")) return;
+  if (!confirm("Draw a new set for today? The current one is discarded.")) return;
   await api("/api/rebuild-daily", { method: "POST" });
-  toast("Đã chọn lại tập hôm nay");
+  toast("Drew a new set for today");
   await refresh();
 });
 
 readUrl();
 syncControls();
-refresh().catch((err) => toast(`Không tải được: ${err.message}`));
+refresh().catch((err) => toast(`Could not load: ${err.message}`));

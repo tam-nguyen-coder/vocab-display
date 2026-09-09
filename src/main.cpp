@@ -640,11 +640,11 @@ static void renderEmpty() {
   canvas.loadFont(fontMeaning);
   canvas.setTextDatum(MC_DATUM);
   canvas.setTextColor(COLOR_MEANING, COLOR_BG);
-  canvas.drawString("Xong het roi", SCREEN_W / 2, 60);
+  canvas.drawString("All done", SCREEN_W / 2, 60);
   canvas.unloadFont();
   canvas.loadFont(fontSmall);
   canvas.setTextColor(COLOR_DIM, COLOR_BG);
-  canvas.drawString("moi tu da duoc danh dau", SCREEN_W / 2, 88);
+  canvas.drawString("every entry is marked known", SCREEN_W / 2, 88);
   canvas.unloadFont();
 }
 
