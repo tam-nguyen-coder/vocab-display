@@ -99,13 +99,52 @@ meanings render as blanks or boxes. The fix is a smooth **VLW** font converted f
 with the Vietnamese range included — supported by the library, roughly 30 KB of flash per
 size. This is a build step, not an afterthought.
 
+## Building it
+
+```bash
+PY=path/to/python tools/gen_assets.sh   # regenerate deck.h and the four fonts
+pio run -t upload
+```
+
+`tools/gen_assets.sh` is the only step to repeat after editing `data/seed.tsv` or changing
+a font size. `tools/ttf2vlw.py` and `tools/gen_deck.py` can also be run individually.
+
+### Checking a layout
+
+135 pixels of height goes fast, and squinting at a 1.14" panel is a poor way to find out
+whether a long term overflowed. The `debug-screenshot` build streams the framebuffer back
+over serial:
+
+```bash
+pio run -e debug-screenshot -t upload
+python3 tools/screenshot.py /dev/cu.usbserial-XXXX 'card-{}.png' --sides front,back
+```
+
+Debug console: `f`/`b` pick the side, `n` next card, `j###` jumps to a deck index,
+`k` marks known, `r` clears all progress, `q` reports state and free heap, `s` dumps the
+framebuffer. Aim captures with `j` — the rotation is shuffled, and the entries worth
+looking at are the extremes rather than whatever comes up next.
+
+## Measured on the device
+
+| | |
+|---|---|
+| Flash | 40% of 1.31 MB, of which 173 KB is font data |
+| Free heap | 283 KB, flat |
+| Vietnamese | legible from 16px; tone marks and `đ` stay distinct |
+| Longest term | `there's no point in + V-ing` drops to the 26px face and wraps to two lines |
+| Longest meaning | `có đủ khả năng (tài chính) để làm gì` wraps to two lines and still leaves room for a two-line example |
+| Progress | survives a reboot — marked 3 known, power-cycled, still 119 remaining |
+
+Flash sits at 40% rather than claude-tracker's 78% because there is no Wi-Fi or TLS stack
+here, which is also where the extra 111 KB of free heap comes from.
+
 ## Status
 
-Early. Decided so far: the deck format, the two-sided card on a timer, and that storage
-size belongs to the host rather than the firmware. Not built yet: the VLW font, the
-firmware, and the web UI.
+The offline device works: the deck is compiled in, progress persists in NVS, cards flip on
+their own, and both worst-case layouts render without clipping.
 
-The plan is to build the offline device first — the 122-entry deck embedded in flash,
-progress in NVS, no network at all — because the real risk in this project is whether
-Vietnamese renders legibly at these sizes on a 1.14" panel, not whether a web form can
-edit a file. A web UI built before that question is answered could be wasted work.
+Not built: the web UI for editing the deck, and the host that would serve it. That was
+deliberately left until after the font question was answered — if Vietnamese had not been
+legible at these sizes, the layout and possibly the card model would have had to change,
+and a web form built first would have been wasted work.
