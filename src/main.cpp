@@ -190,7 +190,15 @@ bool backlightOn = true;
 bool lastAdvanceButton = HIGH;
 bool lastKnownButton = HIGH;
 uint32_t knownPressedAt = 0;
+uint32_t advancePressedAt = 0;
 static const uint32_t HOLD_MS = 600;
+// Longer than the backlight hold, because advancing is the button's everyday job and a
+// stray long press should not spin the screen around.
+static const uint32_t ROTATE_HOLD_MS = 1500;
+
+// config.h supplies the initial value; after that the board remembers what it was last
+// turned to, so re-flashing does not undo a rotation done by hand.
+uint8_t rotation = SCREEN_ROTATION;
 
 // ------------------------------------------------------------------------------ helpers
 
@@ -212,6 +220,17 @@ static uint16_t offlineRemaining() {
   return n;
 }
 
+static void applyRotation(uint8_t next) {
+  rotation = next;
+  prefs.putUChar("rotation", rotation);
+  tft.setRotation(rotation);
+  // The panel keeps whatever was in its own framebuffer, which after a flip is the old
+  // image in the wrong place; clearing it means the next pushSprite lands on black.
+  tft.fillScreen(COLOR_BG);
+  needsRender = true;
+  Serial.printf("[display] rotation=%u\n", rotation);
+}
+
 static void saveProgress() {
   prefs.putBytes("progress", progress, sizeof(progress));
   progressDirty = false;
@@ -219,7 +238,6 @@ static void saveProgress() {
 }
 
 static void loadProgress() {
-  prefs.begin("vocab", false);
   if (prefs.getBytesLength("progress") == sizeof(progress)) {
     prefs.getBytes("progress", progress, sizeof(progress));
   } else {
@@ -626,16 +644,22 @@ static void renderCard() {
 // ------------------------------------------------------------------------------ buttons
 
 static void readButtons() {
+  // Acts on release rather than press so a short tap and a long hold can be told apart.
+  // The delay is imperceptible for a tap and it is what makes the rotate gesture possible
+  // without stealing a whole button.
   bool advance = digitalRead(BUTTON_ADVANCE);
   if (lastAdvanceButton == HIGH && advance == LOW) {
-    if (!showingBack && cardCount > 0) {
+    advancePressedAt = millis();
+  } else if (lastAdvanceButton == LOW && advance == HIGH) {
+    if (millis() - advancePressedAt >= ROTATE_HOLD_MS) {
+      applyRotation(rotation == 1 ? 3 : 1);
+    } else if (!showingBack && cardCount > 0) {
       showingBack = true;
       sideStartedMs = millis();
       needsRender = true;
     } else {
       nextCard();
     }
-    delay(180);  // crude debounce; nothing else needs to happen mid-press
   }
   lastAdvanceButton = advance;
 
@@ -673,6 +697,7 @@ static void debugSerial() {
     case 'h': Serial.printf("[fetch] %s\n", fetchBatch() ? "ok" : "failed"); needsRender = true; break;
     case 'p': reportProgress(); Serial.println("[report] sent"); break;
     case 'o': fillFromDeck(); nextCard(); Serial.println("[source] forced offline"); break;
+    case 'v': applyRotation(rotation == 1 ? 3 : 1); break;
     case 'r':
       // Wipes offline progress. Needed to undo test runs, and useful for starting over.
       memset(progress, 0, sizeof(progress));
@@ -732,8 +757,14 @@ void setup() {
   pinMode(TFT_BL, OUTPUT);
   digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
 
+  // prefs has to be open before the panel is configured: the remembered rotation decides
+  // how the very first frame is drawn, and reading it later would mean a visible flip on
+  // every boot.
+  prefs.begin("vocab", false);
+  rotation = prefs.getUChar("rotation", SCREEN_ROTATION);
+
   tft.init();
-  tft.setRotation(SCREEN_ROTATION);
+  tft.setRotation(rotation);
   tft.fillScreen(COLOR_BG);
 
   canvas.setColorDepth(16);
@@ -754,8 +785,8 @@ void setup() {
   MDNS.begin("vocab-display");
 
   Serial.printf("[boot] vocab-display, %u compiled entries, %u remaining, "
-                "rotation=%d swap=%d free heap=%u\n",
-                DECK_COUNT, offlineRemaining(), SCREEN_ROTATION, SWAP_BUTTONS,
+                "rotation=%u swap=%d free heap=%u\n",
+                DECK_COUNT, offlineRemaining(), rotation, SWAP_BUTTONS,
                 ESP.getFreeHeap());
 }
 

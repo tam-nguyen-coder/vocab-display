@@ -243,8 +243,16 @@ id would silently inherit the history of a deleted entry.
 ## Hardware
 
 A [TTGO T-Display](https://www.espboards.dev/esp32/lilygo-ttgo-t-display-1-14/) — ESP32
-with a 1.14" 135×240 ST7789. Around $10. Two buttons: one advances, one marks known
-(hold it for the backlight).
+with a 1.14" 135×240 ST7789. Around $10.
+
+| Button | Tap | Hold |
+|--------|-----|------|
+| GPIO 35 | advance — flip the card, or move to the next one | 1.5s: **rotate the screen 180°** |
+| GPIO 0 | mark known — the entry never returns | 0.6s: toggle the backlight |
+
+The rotation is remembered, so it survives a reboot and a reflash. `SCREEN_ROTATION` in
+`config.h` only sets the starting value. Flipping the image does not move the buttons, so
+`SWAP_BUTTONS` exists separately for when the one under your thumb changed sides.
 
 It runs from USB. A 3.7V LiPo with a **protection circuit** and a JST 1.25 connector makes
 it portable — the board's TP4054 only charges and has no low-voltage cutoff, so a bare cell
