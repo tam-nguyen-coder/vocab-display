@@ -15,7 +15,7 @@ Two audiences share the API:
 
   the board   GET  /api/batch      today's set, the same answer all day
               POST /api/progress   what it has shown and what was marked known
-  the browser GET  /api/entries    list, search, filter
+  the browser GET  /api/entries    list, search, filter, paged
               PUT  /api/entries/<id>, DELETE /api/entries/<id>
               POST /api/import     paste TSV in bulk
               GET  /api/stats
@@ -388,7 +388,20 @@ class Handler(BaseHTTPRequestHandler):
                 elif status == "unseen":
                     rows = [e for e in rows if not e["known"] and e["seen"] == 0]
                 rows = sorted(rows, key=lambda e: e["id"])
-                return self.send_json({"entries": rows, "matched": len(rows)})
+
+                # Paged server-side rather than in the browser: the deck is meant to grow,
+                # and shipping every row to render fifty of them gets slower for no reason.
+                per = max(1, min(200, int(self.query.get("per", [50])[0])))
+                pages = max(1, (len(rows) + per - 1) // per)
+                page = max(1, min(pages, int(self.query.get("page", [1])[0])))
+                start = (page - 1) * per
+                return self.send_json({
+                    "entries": rows[start:start + per],
+                    "matched": len(rows),
+                    "page": page,
+                    "pages": pages,
+                    "per": per,
+                })
 
         self.send_json({"error": "not found"}, 404)
 

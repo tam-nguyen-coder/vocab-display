@@ -3,6 +3,8 @@
 const $ = (id) => document.getElementById(id);
 const rowsEl = $("rows");
 let entries = [];
+let page = 1;
+const PER_PAGE = 50;
 
 // ---------------------------------------------------------------------------- plumbing
 
@@ -93,11 +95,29 @@ async function loadEntries() {
     q: $("search").value,
     type: $("filter-type").value,
     status: $("filter-status").value,
+    page: page,
+    per: PER_PAGE,
   });
   const data = await api(`/api/entries?${params}`);
   entries = data.entries;
+  // The server clamps the page to what exists, so follow it back rather than keeping a
+  // number that no longer has rows -- deleting the last row of the last page otherwise
+  // leaves an empty table with no way back.
+  page = data.page;
   rowsEl.innerHTML = entries.map(rowHtml).join("");
   $("empty").hidden = entries.length > 0;
+
+  $("pager").hidden = data.matched === 0;
+  $("pager-info").textContent =
+    `Trang ${data.page}/${data.pages} · ${data.matched} kết quả`;
+  $("prev").disabled = data.page <= 1;
+  $("next").disabled = data.page >= data.pages;
+}
+
+function goToPage(next) {
+  page = next;
+  loadEntries().catch((err) => toast(err.message));
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 async function refresh() {
@@ -232,8 +252,11 @@ $("rebuild").addEventListener("click", async () => {
 
 // ------------------------------------------------------------------------------- filters
 
-$("search").addEventListener("input", debounce(loadEntries, 180));
-$("filter-type").addEventListener("change", loadEntries);
-$("filter-status").addEventListener("change", loadEntries);
+const refilter = () => { page = 1; return loadEntries(); };
+$("search").addEventListener("input", debounce(refilter, 180));
+$("filter-type").addEventListener("change", refilter);
+$("filter-status").addEventListener("change", refilter);
+$("prev").addEventListener("click", () => goToPage(page - 1));
+$("next").addEventListener("click", () => goToPage(page + 1));
 
 refresh().catch((err) => toast(`Không tải được: ${err.message}`));

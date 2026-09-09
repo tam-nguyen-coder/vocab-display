@@ -229,6 +229,16 @@ td.actions { width: 34px; text-align: center; }
 }
 .icon:hover { color: var(--danger); background: var(--panel); }
 
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 18px 0 4px;
+}
+.pager-info { color: var(--dim); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.pager button:disabled { opacity: 0.4; cursor: default; border-color: var(--border); color: var(--dim); }
+
 .token { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--dim); }
 .token b { color: var(--text); }
 .empty { padding: 40px 0; text-align: center; color: var(--faint); }
