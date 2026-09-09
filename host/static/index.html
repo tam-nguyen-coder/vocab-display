@@ -18,6 +18,20 @@
   <div class="stats" id="stats"></div>
 </header>
 
+<section class="today" id="today">
+  <div class="today-head">
+    <h2>Tập hôm nay <span class="date" id="today-date">…</span></h2>
+    <span class="spacer"></span>
+    <label>từ <input type="number" id="cfg-words" min="0" max="60" step="1"></label>
+    <label>cụm <input type="number" id="cfg-structures" min="0" max="60" step="1"></label>
+    <button id="cfg-apply">Áp dụng</button>
+    <button id="rebuild">Chọn lại</button>
+  </div>
+  <p class="hint">Board lặp đúng tập này suốt cả ngày; mai sẽ là tập khác. Chọn lại sẽ
+     bỏ tập hiện tại và rút một tập mới cho hôm nay.</p>
+  <div class="chips" id="today-chips"></div>
+</section>
+
 <div class="toolbar">
   <input type="search" id="search" placeholder="Tìm từ, nghĩa hoặc ví dụ…" autocomplete="off">
   <select id="filter-type">
@@ -68,7 +82,8 @@
   <table>
     <colgroup>
       <col class="c-id"><col class="c-type"><col class="c-front"><col class="c-back">
-      <col class="c-example"><col class="c-seen"><col class="c-known"><col class="c-actions">
+      <col class="c-example"><col class="c-seen"><col class="c-seen"><col class="c-known">
+      <col class="c-actions">
     </colgroup>
     <thead>
       <tr>
@@ -77,7 +92,8 @@
         <th>từ / cấu trúc</th>
         <th>nghĩa</th>
         <th>ví dụ</th>
-        <th style="text-align:center">gặp</th>
+        <th style="text-align:center">ngày</th>
+        <th style="text-align:center">lần</th>
         <th style="text-align:center">đã biết</th>
         <th></th>
       </tr>

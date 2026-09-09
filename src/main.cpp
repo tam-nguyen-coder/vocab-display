@@ -65,7 +65,10 @@ TFT_eSprite canvas = TFT_eSprite(&tft);
 // Both sources produce the same shape, so rendering never learns where a card came from.
 // Offline cards point straight at the compiled deck's flash strings; fetched ones point
 // into the arena below.
-static const int MAX_BATCH = 24;
+//
+// The host serves one fixed set per day, so this only has to be larger than the biggest
+// daily dose anyone would configure, not a slice of the deck.
+static const int MAX_BATCH = 40;
 
 struct Card {
   uint16_t id;
@@ -84,7 +87,7 @@ int16_t cardPos = -1;
 
 // A bump allocator reset per batch. Fetched strings have to live somewhere for the life
 // of the batch, and one arena avoids two dozen little heap allocations every refill.
-static const size_t ARENA_SIZE = 6144;
+static const size_t ARENA_SIZE = 10240;
 char arena[ARENA_SIZE];
 size_t arenaUsed = 0;
 
@@ -143,6 +146,20 @@ static const uint32_t FETCH_RETRY_MS = 20000;
 // a day for counts nobody watches that closely.
 static const uint8_t REPORT_EVERY = 5;
 uint8_t unreportedCards = 0;
+
+char batchDate[12] = "";
+// A day's set drains every few minutes, so a single failed refresh must not be treated as
+// the host being gone -- otherwise one hiccup drops the board onto the full compiled deck
+// and it starts showing words that are not in today's set at all.
+int hostMisses = 0;
+static const int HOST_MISS_LIMIT = 3;
+
+// A failed report is retried on a cooldown rather than at the next opportunity. Against a
+// host that refuses the connection the difference is invisible, but a *sleeping* Mac never
+// answers the SYN at all, so every attempt burns the full connect timeout inside the
+// render loop -- seven of those per batch froze the timer bar for about ten seconds.
+uint32_t reportBackoffUntilMs = 0;
+static const uint32_t REPORT_BACKOFF_MS = 60000;
 
 // ------------------------------------------------------------------------------ display
 
@@ -280,6 +297,7 @@ static bool httpRequest(const char *path, const char *body, JsonDocument *out) {
 // only means the same delta is sent again later.
 static void reportProgress() {
   if (source != SOURCE_HOST || WiFi.status() != WL_CONNECTED || !hostResolved) return;
+  if (reportBackoffUntilMs && (int32_t)(millis() - reportBackoffUntilMs) < 0) return;
 
   JsonDocument doc;
   JsonArray list = doc["cards"].to<JsonArray>();
@@ -298,6 +316,14 @@ static void reportProgress() {
   if (httpRequest("/api/progress", body, &reply)) {
     remainingReported = reply["remaining"] | remainingReported;
     unreportedCards = 0;
+    reportBackoffUntilMs = 0;
+    // Cleared only on success, so an unsent delta is re-sent next time. The host merges,
+    // taking the larger seen count and never un-setting known, so repeating a delta is
+    // harmless -- but a mark made while the host is asleep is lost if the board reboots
+    // before it syncs. The word simply comes back around to be marked again.
+    for (uint16_t i = 0; i < cardCount; i++) cards[i].seen = 0;
+  } else {
+    reportBackoffUntilMs = millis() + REPORT_BACKOFF_MS;
   }
 }
 
@@ -325,6 +351,7 @@ static bool fetchBatch() {
   fetchFailures = 0;
   arenaUsed = 0;
   cardCount = 0;
+  strlcpy(batchDate, doc["date"] | "", sizeof(batchDate));
   for (JsonObject item : doc["cards"].as<JsonArray>()) {
     if (cardCount >= MAX_BATCH) break;
     const char *front = arenaCopy(item["f"] | "");
@@ -340,13 +367,15 @@ static bool fetchBatch() {
   cardPos = -1;
   source = SOURCE_HOST;
   unreportedCards = 0;
-  Serial.printf("[host] batch of %u, %u remaining\n", cardCount, remainingReported);
+  hostMisses = 0;
+  Serial.printf("[host] %s: %u cards, %u remaining\n", batchDate, cardCount,
+                remainingReported);
   return true;
 }
 
 static void nextCard() {
   if (cardPos >= 0 && cardPos < (int16_t)cardCount) {
-    cards[cardPos].seen++;
+    cards[cardPos].seen++;  // reset per card on a successful report, so this is a delta
     if (cards[cardPos].deckIndex >= 0) noteSeenOffline(cards[cardPos].deckIndex);
     if (source == SOURCE_HOST && ++unreportedCards >= REPORT_EVERY) reportProgress();
   }
@@ -358,12 +387,19 @@ static void nextCard() {
     fetchPending = false;
     if (fetchBatch()) {
       cardPos = 0;
+    } else if (source == SOURCE_HOST && ++hostMisses < HOST_MISS_LIMIT) {
+      // Replay today's set rather than abandoning it. The cards are still in the arena
+      // and still correct; only the refresh failed.
+      cardPos = 0;
+      Serial.printf("[host] refresh missed (%d/%d), replaying %s\n", hostMisses,
+                    HOST_MISS_LIMIT, batchDate);
     } else if (drained) {
       fillFromDeck();
       cardPos = 0;
+      hostMisses = 0;
     }
-    // A failed fetch mid-batch changes nothing: the offline batch is still good and
-    // cardPos has already advanced into it.
+    // A failed fetch mid-batch while already offline changes nothing: the offline batch is
+    // still good and cardPos has already advanced into it.
   }
 
   showingBack = false;
@@ -628,11 +664,13 @@ static void debugSerial() {
       Serial.println("[reset] offline progress cleared");
       break;
     case 'q':
-      Serial.printf("[state] src=%s pos=%d/%u id=%u side=%s left=%u wifi=%d ip=%s heap=%u\n",
-                    source == SOURCE_HOST ? "host" : "deck", cardPos, cardCount,
+      Serial.printf("[state] src=%s date=%s pos=%d/%u id=%u side=%s left=%u misses=%d "
+                    "wifi=%d ip=%s heap=%u\n",
+                    source == SOURCE_HOST ? "host" : "deck",
+                    batchDate[0] ? batchDate : "-", cardPos, cardCount,
                     cardPos >= 0 && cardCount ? cards[cardPos].id : 0,
-                    showingBack ? "back" : "front", remainingReported, WiFi.status(),
-                    WiFi.localIP().toString().c_str(), ESP.getFreeHeap());
+                    showingBack ? "back" : "front", remainingReported, hostMisses,
+                    WiFi.status(), WiFi.localIP().toString().c_str(), ESP.getFreeHeap());
       break;
     case 'j': {
       // Jump straight to a batch position, sent as three ASCII digits. Captures are worth

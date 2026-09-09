@@ -125,6 +125,30 @@ Debug console: `f`/`b` pick the side, `n` next card, `j###` jumps to a deck inde
 framebuffer. Aim captures with `j` — the rotation is shuffled, and the entries worth
 looking at are the extremes rather than whatever comes up next.
 
+## One set a day
+
+The deck is not worked through front to back. Each day gets one fixed set — by default
+eight words and four sentence patterns, interleaved — and the board repeats that set all
+day. Tomorrow draws a different one, chosen from whatever has been practised least.
+
+Twelve entries cycle in about three minutes at the device's pacing, so a day at the desk
+shows each one dozens of times. That repetition is the point; it is the reason the deck is
+not raced through.
+
+`GET /api/batch` is idempotent for exactly this reason: the board re-asks every few
+minutes and every answer has to be the same set, or the day stops being a day. The day
+boundary is the host's local date, since the host runs on the same machine as the person.
+
+**`days` is the number that means something.** With one set repeated all day, `seen`
+climbs past a hundred within hours and stops distinguishing anything. `days` counts the
+distinct days an entry has appeared, is incremented by the host exactly once when it
+builds a set, and is what tomorrow's set is chosen by.
+
+Marking an entry known pulls it out of today's set and a replacement is drawn, so the day
+keeps its size. Changing the dose reshapes the current day immediately rather than waiting
+for tomorrow — quotas are honoured per type, which is not the same as honouring the total:
+filling from one mixed pool turned a requested 8 + 4 into 9 + 3.
+
 ## How the board and host share the work
 
 The board fetches a batch of 24, shows it, and reports back. Three details carry most of
@@ -137,6 +161,11 @@ resolving a host takes more, and none of that belongs between power and the firs
 **Source changes land on card boundaries.** The loop only raises a flag; `nextCard()` does
 the fetching. Fetching where the timer notices it would swap the batch out from under a
 card still on screen.
+
+**A failed refresh replays today's set rather than abandoning it.** A day's set drains
+every few minutes, so treating one miss as "the host is gone" would drop the board onto
+the full compiled deck and start showing words that are not in today's set. It takes three
+consecutive misses to fall back.
 
 **Progress goes out every five cards, not every card.** The host rewrites its whole store
 per write, so per-card reporting would mean thousands of full-file writes a day for counts
@@ -156,6 +185,8 @@ offline is a normal state, not a fault, and does not deserve a banner.
 | Longest term | `there's no point in + V-ing` drops to the 26px face and wraps to two lines |
 | Longest meaning | `có đủ khả năng (tài chính) để làm gì` wraps to two lines and still leaves room for a two-line example |
 | Progress | survives a reboot — marked 3 known, power-cycled, still 119 remaining |
+| Daily set | idempotent across repeated requests; a simulated rollover drew 12 fresh entries with zero overlap |
+| Host loss | two drained cycles replay today's set, the third falls back to the compiled deck |
 
 Wi-Fi, HTTPClient, mDNS and ArduinoJson together put the app at 92% of the default 1.31 MB
 partition -- too little headroom to add anything -- so `platformio.ini` switches to
@@ -182,19 +213,26 @@ in cleartext over HTTP on a home network and is not real authentication.
 
 | Endpoint | Who | Does |
 |----------|-----|------|
-| `GET /api/batch?n=` | board | the next entries to show, fewest-seen first |
+| `GET /api/batch?n=` | board | today's set — the same answer all day |
 | `POST /api/progress` | board | reports what it showed and what was marked known |
 | `GET /api/entries` | browser | list, search, filter by type and status |
 | `PUT`/`DELETE /api/entries/<id>` | browser | edit in place, or remove |
 | `POST /api/import` | browser | paste tab- or pipe-separated lines in bulk |
-| `GET /api/stats` | browser | counts, and the token |
+| `POST /api/config` | browser | how many words and patterns a day holds |
+| `POST /api/rebuild-daily` | browser | discard today's set and draw another |
+| `GET /api/stats` | browser | counts, today's set, and the token |
 
 Two decisions worth recording:
 
-**Progress is merged, never assigned.** The board may have been offline and is reporting a
-delta; seen counts take the larger of the two values and `known` is sticky. That makes the
-endpoint idempotent, so a retried request cannot walk a count backwards, and two boards
-cannot overwrite each other.
+**Progress accumulates, and `known` is never un-set.** The board reports deltas, so
+showings add up across the day; `known` only turns on, so a board can never un-know
+something.
+
+Adding is not idempotent -- a report whose response is lost gets re-sent and
+double-counts. That is deliberate: with one set repeated all day, `seen` climbs past a
+hundred and stops carrying much meaning, so a few extra do no harm. The number to trust is
+`days`, which the host increments exactly once per day per entry when it builds the set,
+never taking the board's word for it.
 
 **The store is written through a temp file and renamed.** A half-written store is worse
 than a stale one — the deck and every bit of progress live in that one file, and rename is

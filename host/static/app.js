@@ -38,19 +38,32 @@ function debounce(fn, ms) {
 const STAT_LABELS = [
   ["remaining", "còn lại", true],
   ["known", "đã biết", false],
-  ["unseen", "chưa gặp", false],
+  ["unseen", "chưa học ngày nào", false],
   ["total", "tổng", false],
   ["words", "từ", false],
   ["structures", "cấu trúc", false],
 ];
 
+function renderToday(daily, config) {
+  $("today-date").textContent = daily.date || "—";
+  // Only overwrite the inputs when they are not being typed into, or applying a value
+  // would fight the caret on every background refresh.
+  for (const [id, key] of [["cfg-words", "daily_words"], ["cfg-structures", "daily_structures"]]) {
+    if (document.activeElement !== $(id)) $(id).value = config[key];
+  }
+  $("today-chips").innerHTML = daily.entries.map((e) =>
+    `<span class="chip ${e.type}"><span class="dot"></span>${escapeHtml(e.front)}` +
+    `<span class="days">${e.days}d</span></span>`).join("");
+}
+
 async function loadStats() {
-  const { stats, token } = await api("/api/stats");
+  const { stats, token, daily, config } = await api("/api/stats");
   $("token").textContent = token;
   $("stats").innerHTML = STAT_LABELS
     .map(([key, label, accent]) =>
       `<div class="stat${accent ? " is-accent" : ""}"><b>${stats[key]}</b><span>${label}</span></div>`)
     .join("");
+  renderToday(daily, config);
 }
 
 function escapeHtml(s) {
@@ -67,6 +80,7 @@ function rowHtml(e) {
     <td><input class="cell front" value="${escapeHtml(e.front)}" data-field="front"></td>
     <td><input class="cell back" value="${escapeHtml(e.back)}" data-field="back"></td>
     <td><input class="cell example" value="${escapeHtml(e.example)}" data-field="example"></td>
+    <td class="seen">${e.days}</td>
     <td class="seen">${e.seen}</td>
     <td style="text-align:center"><input type="checkbox" data-field="known"
         ${e.known ? "checked" : ""}></td>
@@ -194,6 +208,25 @@ $("import-submit").addEventListener("click", async () => {
   $("import-result").textContent = parts.join(", ") +
     (result.errors.length ? ` — ${result.errors[0]}` : "");
   if (result.added) $("import-text").value = "";
+  await refresh();
+});
+
+// --------------------------------------------------------------------------- daily set
+
+$("cfg-apply").addEventListener("click", async () => {
+  const body = {
+    daily_words: Number($("cfg-words").value),
+    daily_structures: Number($("cfg-structures").value),
+  };
+  await api("/api/config", { method: "POST", body: JSON.stringify(body) });
+  toast(`Mỗi ngày ${body.daily_words} từ + ${body.daily_structures} cụm`);
+  await refresh();
+});
+
+$("rebuild").addEventListener("click", async () => {
+  if (!confirm("Rút một tập mới cho hôm nay? Tập hiện tại sẽ bị bỏ.")) return;
+  await api("/api/rebuild-daily", { method: "POST" });
+  toast("Đã chọn lại tập hôm nay");
   await refresh();
 });
 
