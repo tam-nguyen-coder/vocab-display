@@ -139,12 +139,52 @@ looking at are the extremes rather than whatever comes up next.
 Flash sits at 40% rather than claude-tracker's 78% because there is no Wi-Fi or TLS stack
 here, which is also where the extra 111 KB of free heap comes from.
 
+## The host and its web UI
+
+`data/seed.tsv` is only the seed. The living deck is `data/store.json`, edited through a
+web UI served by a standard-library Python server — no npm, no pip, no build step:
+
+```bash
+python3 host/server.py     # http://localhost:8788
+```
+
+It prints the shared token on startup; that goes into the firmware's `config.h`. Browser
+requests come from the machine itself and carry no token; the board's two endpoints do.
+The token is there so nothing else on the Wi-Fi can read or rewrite the deck — it travels
+in cleartext over HTTP on a home network and is not real authentication.
+
+| Endpoint | Who | Does |
+|----------|-----|------|
+| `GET /api/batch?n=` | board | the next entries to show, fewest-seen first |
+| `POST /api/progress` | board | reports what it showed and what was marked known |
+| `GET /api/entries` | browser | list, search, filter by type and status |
+| `PUT`/`DELETE /api/entries/<id>` | browser | edit in place, or remove |
+| `POST /api/import` | browser | paste tab- or pipe-separated lines in bulk |
+| `GET /api/stats` | browser | counts, and the token |
+
+Two decisions worth recording:
+
+**Progress is merged, never assigned.** The board may have been offline and is reporting a
+delta; seen counts take the larger of the two values and `known` is sticky. That makes the
+endpoint idempotent, so a retried request cannot walk a count backwards, and two boards
+cannot overwrite each other.
+
+**The store is written through a temp file and renamed.** A half-written store is worse
+than a stale one — the deck and every bit of progress live in that one file, and rename is
+the only step that is atomic.
+
+Ids are never reused. Board progress is keyed off them, so a recycled id would silently
+inherit the history of a deleted entry.
+
 ## Status
 
 The offline device works: the deck is compiled in, progress persists in NVS, cards flip on
 their own, and both worst-case layouts render without clipping.
 
-Not built: the web UI for editing the deck, and the host that would serve it. That was
-deliberately left until after the font question was answered — if Vietnamese had not been
-legible at these sizes, the layout and possibly the card model would have had to change,
-and a web form built first would have been wasted work.
+The host and its web UI work: the deck can be searched, filtered, edited in place,
+imported in bulk, and entries marked known, and both board endpoints serve and merge
+correctly.
+
+Not built yet: the firmware side of that link. The board still runs entirely from its
+compiled-in deck. Wiring it to the host is additive by design — the compiled deck stays as
+the offline fallback, so a sleeping Mac means no new entries rather than a blank screen.

@@ -34,9 +34,12 @@ static const int SCREEN_W = 240;
 static const int SCREEN_H = 135;
 static const int MARGIN = 8;
 
-// How long each side stays up. The front is shorter because it is a prompt, not reading.
-static const uint32_t FRONT_MS = 4000;
-static const uint32_t BACK_MS = 6000;
+// How long each side stays up. The front is shorter because it is a prompt to recall,
+// not something to read; the back carries two to four lines and needs the time. The first
+// pass at 4s/6s read as hurried on the actual device -- these are the two numbers most
+// worth tuning by feel rather than by argument.
+static const uint32_t FRONT_MS = 6000;
+static const uint32_t BACK_MS = 10000;
 
 static const uint16_t COLOR_BG = 0x0000;
 static const uint16_t COLOR_TERM = 0xFFFF;

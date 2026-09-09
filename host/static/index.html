@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vocab-display</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header>
+  <div class="title">
+    <h1>vocab-display</h1>
+    <span class="subtitle">kho từ vựng của thiết bị trên bàn</span>
+    <span class="spacer"></span>
+    <span class="token">token <b id="token">…</b></span>
+  </div>
+  <div class="stats" id="stats"></div>
+</header>
+
+<div class="toolbar">
+  <input type="search" id="search" placeholder="Tìm từ, nghĩa hoặc ví dụ…" autocomplete="off">
+  <select id="filter-type">
+    <option value="">Mọi loại</option>
+    <option value="word">Từ</option>
+    <option value="structure">Cấu trúc</option>
+  </select>
+  <select id="filter-status">
+    <option value="">Mọi trạng thái</option>
+    <option value="unseen">Chưa gặp</option>
+    <option value="learning">Đang học</option>
+    <option value="known">Đã biết</option>
+  </select>
+  <span class="spacer"></span>
+  <button id="toggle-add">Thêm từ</button>
+  <button id="toggle-import">Nhập hàng loạt</button>
+</div>
+
+<section class="panel" id="add-panel" hidden>
+  <h2>Thêm một entry</h2>
+  <p>Nghĩa để tiếng Việt. Ví dụ có thể bỏ trống.</p>
+  <div class="row">
+    <input type="search" id="add-front" placeholder="từ hoặc cấu trúc (tiếng Anh)" style="flex:1">
+    <input type="search" id="add-back" placeholder="nghĩa (tiếng Việt)" style="flex:1">
+  </div>
+  <div class="row">
+    <input type="search" id="add-example" placeholder="ví dụ (tiếng Anh)" style="flex:1">
+    <select id="add-type"><option value="word">Từ</option><option value="structure">Cấu trúc</option></select>
+    <select id="add-level"><option>A2</option><option selected>B1</option><option>B2</option></select>
+    <button class="primary" id="add-submit">Thêm</button>
+  </div>
+</section>
+
+<section class="panel" id="import-panel" hidden>
+  <h2>Nhập hàng loạt</h2>
+  <p>Mỗi dòng một entry, phân cách bằng tab hoặc dấu <code>|</code>:
+     <code>front | back | ví dụ</code>. Dòng bắt đầu bằng <code>#</code> bị bỏ qua.
+     Từ đã có trong kho sẽ bị bỏ, không ghi đè.</p>
+  <textarea id="import-text" spellcheck="false"
+    placeholder="reluctant | ngần ngừ, không muốn | She was reluctant to answer.&#10;on behalf of | thay mặt cho | I speak on behalf of the team."></textarea>
+  <div class="row">
+    <button class="primary" id="import-submit">Nhập</button>
+    <span id="import-result" class="subtitle"></span>
+  </div>
+</section>
+
+<div class="wrap">
+  <table>
+    <colgroup>
+      <col class="c-id"><col class="c-type"><col class="c-front"><col class="c-back">
+      <col class="c-example"><col class="c-seen"><col class="c-known"><col class="c-actions">
+    </colgroup>
+    <thead>
+      <tr>
+        <th class="id">id</th>
+        <th>loại</th>
+        <th>từ / cấu trúc</th>
+        <th>nghĩa</th>
+        <th>ví dụ</th>
+        <th style="text-align:center">gặp</th>
+        <th style="text-align:center">đã biết</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <div class="empty" id="empty" hidden>Không có entry nào khớp.</div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="/app.js"></script>
+</body>
+</html>
