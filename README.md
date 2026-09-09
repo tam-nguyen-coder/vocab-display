@@ -51,6 +51,47 @@ plain file is the whole answer.
 Progress state is 8 bytes per entry (`id`, times seen, status, last-seen date). Even
 10,000 entries is 78 KB of state — small enough to keep in one file, versioned in git.
 
+## The card flips, on a timer
+
+Each entry is shown as a two-sided card rather than one crowded screen:
+
+```
+front  ~4s  --auto-->  back  ~6s  -->  next card
+(term)                 (meaning + example)
+```
+
+Showing everything at once means the term itself only gets about 26px of height, because
+the meaning and example need the rest. Flipping gives each side the whole screen, which
+roughly doubles the type size available to both — the term gets ~44px, the meaning ~24px.
+
+Flipping on a timer rather than on a button press keeps the device passive: it runs
+unattended like a clock. The four seconds of front-only turn out to be the useful part —
+they are a pause to recall the meaning before the answer appears, which beats reading both
+halves simultaneously. A thin bar drains along the bottom edge so the reveal is paced
+rather than sudden.
+
+Buttons only override the timer:
+
+| Input | Action |
+|-------|--------|
+| Button 1 | Advance: flip if showing the front, next card if showing the back |
+| Button 2 | Mark known — never show this entry again |
+| Button 2 (hold) | Toggle the backlight |
+
+### Vertical budget for the back, the tighter side
+
+| Height | Element |
+|-------:|---------|
+| 8 px | type label and counter |
+| 16 px | the term again, small, so you don't lose track of the question |
+| 48 px | meaning, 24px over two lines |
+| 28 px | example, 14px over two lines |
+
+With gaps that lands near 126 px of 135. It fits, but the figures come from assuming a
+character advance of about half the font height; they have to be **re-measured against real
+pixels** once the VLW font is in. The longest meaning in the seed deck,
+`có đủ khả năng (tài chính) để làm gì` at 36 characters, is the worst case to test with.
+
 ## Vietnamese needs a real font
 
 TFT_eSPI's built-in fonts are ASCII only: no `ă â ê ô ơ ư đ`, no tone marks. Vietnamese
@@ -60,5 +101,11 @@ size. This is a build step, not an afterthought.
 
 ## Status
 
-Early. The deck and the storage analysis are done; the firmware and the web UI are not.
-The host/board split is still being decided — see the open questions in the project notes.
+Early. Decided so far: the deck format, the two-sided card on a timer, and that storage
+size belongs to the host rather than the firmware. Not built yet: the VLW font, the
+firmware, and the web UI.
+
+The plan is to build the offline device first — the 122-entry deck embedded in flash,
+progress in NVS, no network at all — because the real risk in this project is whether
+Vietnamese renders legibly at these sizes on a 1.14" panel, not whether a web form can
+edit a file. A web UI built before that question is answered could be wasted work.
