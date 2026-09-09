@@ -9,3 +9,6 @@ data/store.json
 # used, which may not be redistributable.
 include/deck.h
 include/fonts/
+
+__pycache__/
+*.pyc
