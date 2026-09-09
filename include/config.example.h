@@ -16,3 +16,11 @@
 // The ESP32 is 2.4 GHz only. If the network is split per band, the one the host sits on
 // may well be the 5 GHz half, which the board cannot see at all -- it reports
 // NO_SSID_AVAIL, indistinguishable from a typo.
+
+// Screen orientation. 1 puts the USB port on the left; 3 flips the whole thing 180
+// degrees for when the cable needs to leave the other way.
+#define SCREEN_ROTATION 1
+
+// Flipping the image does not move the buttons. Set this to 1 to also swap which one
+// advances and which one marks an entry known.
+#define SWAP_BUTTONS 0

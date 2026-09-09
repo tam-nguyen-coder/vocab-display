@@ -27,6 +27,20 @@
 #define VOCAB_DEBUG 0
 #endif
 
+// 1 puts the USB port on the left; 3 is the same landscape flipped 180 degrees, for when
+// the cable needs to leave the other way. Set it in config.h.
+#ifndef SCREEN_ROTATION
+#define SCREEN_ROTATION 1
+#endif
+
+// Flipping the image does not move the buttons, so after a 180 turn the one that was under
+// your left thumb is under your right. Whether that wants swapping depends on how the
+// thing sits on the desk, which is not something the firmware can know -- hence a separate
+// switch rather than tying it to the rotation.
+#ifndef SWAP_BUTTONS
+#define SWAP_BUTTONS 0
+#endif
+
 #include "config.h"
 #include "deck.h"
 #include "fonts/font_meaning.h"
@@ -36,8 +50,13 @@
 
 // ---------------------------------------------------------------------------- hardware
 
-static const int BUTTON_ADVANCE = 35;  // input-only pin; the board provides the pull-up
-static const int BUTTON_KNOWN = 0;     // shared with the boot strap, hence INPUT_PULLUP
+// GPIO 35 is input-only and relies on the board's own pull-up; GPIO 0 is the boot strap,
+// so it needs INPUT_PULLUP. That difference is why the two are configured separately below
+// and why swapping them is a matter of which pin gets which job, not of renaming.
+static const int PIN_TOP = 35;
+static const int PIN_BOTTOM = 0;
+static const int BUTTON_ADVANCE = SWAP_BUTTONS ? PIN_BOTTOM : PIN_TOP;
+static const int BUTTON_KNOWN = SWAP_BUTTONS ? PIN_TOP : PIN_BOTTOM;
 static const int SCREEN_W = 240;
 static const int SCREEN_H = 135;
 static const int MARGIN = 8;
@@ -708,13 +727,13 @@ static void debugSerial() {
 void setup() {
   Serial.begin(VOCAB_DEBUG ? 460800 : 115200);
 
-  pinMode(BUTTON_ADVANCE, INPUT);
-  pinMode(BUTTON_KNOWN, INPUT_PULLUP);
+  pinMode(PIN_TOP, INPUT);            // input-only, pulled up on the board
+  pinMode(PIN_BOTTOM, INPUT_PULLUP);  // boot strap pin, needs the internal pull-up
   pinMode(TFT_BL, OUTPUT);
   digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
 
   tft.init();
-  tft.setRotation(1);
+  tft.setRotation(SCREEN_ROTATION);
   tft.fillScreen(COLOR_BG);
 
   canvas.setColorDepth(16);
@@ -734,8 +753,10 @@ void setup() {
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   MDNS.begin("vocab-display");
 
-  Serial.printf("[boot] vocab-display, %u compiled entries, %u remaining, free heap=%u\n",
-                DECK_COUNT, offlineRemaining(), ESP.getFreeHeap());
+  Serial.printf("[boot] vocab-display, %u compiled entries, %u remaining, "
+                "rotation=%d swap=%d free heap=%u\n",
+                DECK_COUNT, offlineRemaining(), SCREEN_ROTATION, SWAP_BUTTONS,
+                ESP.getFreeHeap());
 }
 
 void loop() {
