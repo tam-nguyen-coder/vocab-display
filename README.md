@@ -125,19 +125,46 @@ Debug console: `f`/`b` pick the side, `n` next card, `j###` jumps to a deck inde
 framebuffer. Aim captures with `j` — the rotation is shuffled, and the entries worth
 looking at are the extremes rather than whatever comes up next.
 
+## How the board and host share the work
+
+The board fetches a batch of 24, shows it, and reports back. Three details carry most of
+the behaviour:
+
+**The compiled deck is the floor, not a fallback bolted on afterwards.** The board renders
+its first card before Wi-Fi is even attempted, because joining a network takes seconds and
+resolving a host takes more, and none of that belongs between power and the first word.
+
+**Source changes land on card boundaries.** The loop only raises a flag; `nextCard()` does
+the fetching. Fetching where the timer notices it would swap the batch out from under a
+card still on screen.
+
+**Progress goes out every five cards, not every card.** The host rewrites its whole store
+per write, so per-card reporting would mean thousands of full-file writes a day for counts
+nobody watches that closely. Marking an entry known reports immediately — that is the one
+change worth a round trip of its own.
+
+A dot appears in the corner while running from the compiled deck. Deliberately not a word:
+offline is a normal state, not a fault, and does not deserve a banner.
+
 ## Measured on the device
 
 | | |
 |---|---|
-| Flash | 40% of 1.31 MB, of which 173 KB is font data |
-| Free heap | 283 KB, flat |
+| Flash | 38% of 3 MB (`huge_app`), of which 173 KB is font data |
+| Free heap | 167 KB with Wi-Fi up, flat over a long run |
 | Vietnamese | legible from 16px; tone marks and `đ` stay distinct |
 | Longest term | `there's no point in + V-ing` drops to the 26px face and wraps to two lines |
 | Longest meaning | `có đủ khả năng (tài chính) để làm gì` wraps to two lines and still leaves room for a two-line example |
 | Progress | survives a reboot — marked 3 known, power-cycled, still 119 remaining |
 
-Flash sits at 40% rather than claude-tracker's 78% because there is no Wi-Fi or TLS stack
-here, which is also where the extra 111 KB of free heap comes from.
+Wi-Fi, HTTPClient, mDNS and ArduinoJson together put the app at 92% of the default 1.31 MB
+partition -- too little headroom to add anything -- so `platformio.ini` switches to
+`huge_app`, which trades the second OTA slot for a ~3 MB single app partition. That costs
+nothing on a board flashed over USB.
+
+The link was verified by pulling the plug on it: host up gives `src=host`, killing the
+host drops the board to `src=deck` without a blank screen, and restarting the host brings
+it back to `src=host` on its own.
 
 ## The host and its web UI
 
