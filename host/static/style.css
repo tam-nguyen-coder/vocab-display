@@ -271,7 +271,10 @@ td.actions { width: 34px; text-align: center; }
   margin-top: 14px;
 }
 .controls .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.controls .row + .row { margin-top: 10px; }
+/* Targeted directly rather than with `.row + .row`: the search-syntax paragraph sits
+   between the two rows and stays in the DOM while hidden, so the adjacent-sibling rule
+   never matched and the filters ended up flush against the search box. */
+.controls .filters { margin-top: 18px; }
 
 .search-wrap { position: relative; display: flex; align-items: center; }
 .search-wrap input[type="search"] { min-width: 300px; padding-right: 30px; }
@@ -288,7 +291,7 @@ td.actions { width: 34px; text-align: center; }
 .search-wrap input:focus + .slash { opacity: 0; }
 
 .help {
-  margin: 10px 0 0;
+  margin: 12px 0 0;
   color: var(--dim);
   font-size: 12px;
   line-height: 1.7;
