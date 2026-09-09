@@ -1,0 +1,5 @@
+.pio/
+.DS_Store
+include/config.h
+node_modules/
+data/store.json
