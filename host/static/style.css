@@ -161,10 +161,10 @@ table { width: 100%; border-collapse: collapse; min-width: 900px; table-layout: 
    short ones. */
 col.c-id { width: 46px; }
 col.c-type { width: 74px; }
+col.c-pos { width: 122px; }
 col.c-front { width: 22%; }
 col.c-back { width: 30%; }
 col.c-example { width: auto; }
-col.c-seen { width: 54px; }
 col.c-known { width: 64px; }
 col.c-actions { width: 36px; }
 thead th {
@@ -186,7 +186,6 @@ tbody tr:hover { background: var(--accent-soft); }
 tbody tr.known { opacity: 0.5; }
 td { padding: 3px 6px; vertical-align: middle; }
 td.id { color: var(--faint); font-variant-numeric: tabular-nums; font-size: 12px; text-align: right; width: 46px; }
-td.seen { color: var(--dim); font-variant-numeric: tabular-nums; text-align: center; width: 52px; font-size: 13px; }
 td.actions { width: 34px; text-align: center; }
 
 /* Cells look like plain text until focused, so the whole table reads as a document but
@@ -378,11 +377,12 @@ td.num.dim { color: var(--faint); }
   line-height: 1.5;
 }
 .hl.back { color: var(--accent); }
+.hl.pos { color: var(--dim); font-size: 13px; }
 .hl.example { color: var(--dim); font-size: 13px; }
 
 /* While not editing, the input's own glyphs are transparent so only the highlight layer
    is seen; the caret stays visible so clicking still puts you where you clicked. */
-.cell.front, .cell.back, .cell.example {
+.cell.front, .cell.back, .cell.example, .cell.pos {
   color: transparent;
   caret-color: var(--accent);
   background: transparent;
@@ -391,6 +391,7 @@ td.num.dim { color: var(--faint); }
 .cellwrap.editing .cell.front { color: var(--text); }
 .cellwrap.editing .cell.back { color: var(--accent); }
 .cellwrap.editing .cell.example { color: var(--dim); }
+.cellwrap.editing .cell.pos { color: var(--dim); }
 .cellwrap.editing .cell { background: var(--panel); }
 
 mark { background: #ffe08a; color: #1c1b1a; border-radius: 2px; padding: 0 1px; }

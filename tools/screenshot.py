@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["pyserial>=3.5", "pillow>=10"]
+# ///
 """Pull the T-Display's framebuffer over serial and save it as a PNG.
 
 Needs the debug-screenshot build:
 
     pio run -e debug-screenshot -t upload
-    python3 tools/screenshot.py /dev/cu.usbserial-XXXX 'card-{}.png' --sides front,back
+    uv run tools/screenshot.py /dev/cu.usbserial-XXXX 'card-{}.png' --sides front,back
 
 Commands the debug build understands: f/b select the side, n moves to the next card,
 q reports state and free heap, s renders and dumps the framebuffer as RGB565 hex.
