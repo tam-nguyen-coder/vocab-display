@@ -1,123 +1,123 @@
-id	type	level	front	back	example
-1	word	B1	afford	có đủ khả năng (tài chính) để làm gì	We can't afford a new car this year.
-2	word	B1	allow	cho phép	My parents don't allow me to stay out late.
-3	word	B1	apply	nộp đơn; áp dụng	She applied for a job at the bank.
-4	word	B1	approach	cách tiếp cận; tiến lại gần	We need a different approach to this problem.
-5	word	B1	argue	tranh luận, tranh cãi	They argue about money all the time.
-6	word	B1	arrange	sắp xếp, thu xếp	I'll arrange a meeting for next week.
-7	word	B2	assume	cho rằng, mặc định là	I assumed you knew about the change.
-8	word	B1	attempt	cố gắng; nỗ lực	He made no attempt to hide his anger.
-9	word	A2	available	có sẵn; rảnh	Is this table available?
-10	word	B1	avoid	tránh	Try to avoid rush hour.
-11	word	B1	benefit	lợi ích; có lợi	Everyone benefits from good sleep.
-12	word	B2	brief	ngắn gọn	Let me give you a brief summary.
-13	word	B1	claim	khẳng định; đòi quyền lợi	He claims he wasn't there.
-14	word	A2	common	phổ biến, thường gặp	That's a common mistake.
-15	word	B1	complain	phàn nàn	She complained about the noise.
-16	word	B1	concern	sự lo ngại; liên quan đến	My main concern is the cost.
-17	word	B1	consider	xem xét, cân nhắc	Have you considered moving?
-18	word	B1	contain	chứa	This drink contains no sugar.
-19	word	A2	convenient	tiện lợi	Is 3pm convenient for you?
-20	word	B1	deal with	xử lý, giải quyết	I'll deal with it tomorrow.
-21	word	B1	deliver	giao (hàng); thực hiện đúng cam kết	They deliver on Sundays too.
-22	word	B1	deny	phủ nhận	He denied taking the money.
-23	word	A2	depend on	phụ thuộc vào	It depends on the weather.
-24	word	B1	describe	miêu tả	Can you describe him?
-25	word	B2	despite	mặc dù	Despite the rain, we went out.
-26	word	B1	develop	phát triển	The city has developed quickly.
-27	word	B1	disappoint	làm thất vọng	I don't want to disappoint you.
-28	word	B1	effort	sự nỗ lực	Thanks for your effort.
-29	word	B1	encourage	khuyến khích, động viên	My teacher encouraged me to try.
-30	word	B1	ensure	đảm bảo	Please ensure the door is locked.
-31	word	B2	eventually	cuối cùng thì (sau một thời gian)	He eventually agreed.
-32	word	B1	expect	mong đợi; dự kiến	I expect she'll be late.
-33	word	A2	fair	công bằng	That's not fair!
-34	word	A2	familiar	quen thuộc	Your face looks familiar.
-35	word	B1	figure out	tìm ra, hiểu ra	I can't figure out this problem.
-36	word	B1	focus on	tập trung vào	Let's focus on the main issue.
-37	word	B2	further	thêm nữa; xa hơn	Do you need further help?
-38	word	B1	gain	đạt được, tăng thêm	She gained a lot of experience.
-39	word	A2	guess	đoán	Guess what happened!
-40	word	B1	handle	xử lý, đối phó	She handled the situation well.
-41	word	B2	hardly	hầu như không	I hardly know him.
-42	word	B1	hire	thuê (người)	They hired two new staff.
-43	word	B1	improve	cải thiện	My English is improving.
-44	word	B1	increase	tăng	Prices increased last month.
-45	word	B2	indeed	thực sự, đúng vậy	It was indeed a mistake.
-46	word	B1	influence	ảnh hưởng	Weather influences my mood.
-47	word	B2	insist	khăng khăng, nhất quyết	He insisted on paying.
-48	word	A2	instead	thay vào đó	Let's walk instead.
-49	word	B2	involve	liên quan, bao gồm	The job involves travelling.
-50	word	B1	lack	thiếu; sự thiếu hụt	He lacks confidence.
-51	word	B2	likely	có khả năng	It's likely to rain.
-52	word	B1	manage to	xoay xở làm được	I managed to finish on time.
-53	word	B1	mention	đề cập, nhắc đến	She mentioned your name.
-54	word	A2	necessary	cần thiết	It's not necessary to book.
-55	word	B1	obvious	rõ ràng, hiển nhiên	The answer is obvious.
-56	word	B2	occur	xảy ra	The accident occurred at night.
-57	word	B1	opportunity	cơ hội	This is a great opportunity.
-58	word	B1	particular	cụ thể, riêng biệt	Any particular reason?
-59	word	B1	point out	chỉ ra	She pointed out my mistake.
-60	word	A2	prefer	thích hơn	I prefer tea to coffee.
-61	word	B1	prevent	ngăn chặn	Exercise prevents illness.
-62	word	B1	provide	cung cấp	They provide free wifi.
-63	word	B1	purpose	mục đích	What's the purpose of this?
-64	word	B1	realize	nhận ra	I didn't realize it was late.
-65	word	B1	recommend	đề xuất, khuyên dùng	I recommend this place.
-66	word	B1	reduce	giảm	We need to reduce costs.
-67	word	B1	refuse	từ chối	He refused to help.
-68	word	B2	regular	thường xuyên, đều đặn	I'm a regular customer.
-69	word	B2	rely on	dựa vào, tin cậy	You can rely on her.
-70	word	B1	remain	vẫn còn; ở lại	Many questions remain.
-71	word	B1	remind	nhắc nhở	Remind me to call him.
-72	word	B1	replace	thay thế	We replaced the old one.
-73	word	B1	require	yêu cầu, cần đến	This requires patience.
-74	word	B2	reveal	tiết lộ	He revealed the truth.
-75	word	B1	several	một vài	I called several times.
-76	word	A2	similar	tương tự	They look similar.
-77	word	B1	solve	giải quyết	Let's solve this together.
-78	word	B2	straight	thẳng; ngay lập tức	Go straight ahead.
-79	word	B1	suggest	gợi ý, đề nghị	I suggest we wait.
-80	word	B1	suitable	phù hợp	This isn't suitable for kids.
-81	word	B2	suppose	cho rằng, đoán	I suppose you're right.
-82	word	B2	tend to	có xu hướng	I tend to forget names.
-83	word	B2	therefore	do đó, vì vậy	It rained; therefore we stayed in.
-84	word	B2	though	mặc dù	It's cheap, though not great.
-85	word	B1	treat	đối xử; điều trị	Treat others with respect.
-86	word	B2	turn out	hoá ra là	It turned out to be fine.
-87	word	B2	unless	trừ khi	I won't go unless you come.
-88	word	B1	valuable	có giá trị	This is valuable advice.
-89	word	B2	various	nhiều, đa dạng	We stopped for various reasons.
-90	word	B2	whether	liệu ... có hay không	I don't know whether to go.
-91	word	B1	worth	đáng giá	It's worth trying.
-92	structure	B1	used to + V	đã từng (nhưng nay không còn)	I used to smoke.
-93	structure	B2	be used to + V-ing	đã quen với việc	I'm used to getting up early.
-94	structure	B1	would rather + V	thà là, thích hơn	I'd rather stay home.
-95	structure	B1	had better + V	nên (khuyên mạnh)	You'd better see a doctor.
-96	structure	A2	as soon as	ngay khi	Call me as soon as you arrive.
-97	structure	B1	in case	đề phòng trường hợp	Take an umbrella in case it rains.
-98	structure	B2	no matter how/what	bất kể thế nào / cái gì	No matter how hard I try, it fails.
-99	structure	B1	the more ... the more	càng ... càng	The more I read, the more I learn.
-100	structure	B2	not only ... but also	không chỉ ... mà còn	Not only cheap but also good.
-101	structure	B2	so ... that	quá ... đến nỗi	It was so cold that I stayed in.
-102	structure	B2	such a ... that	một ... đến nỗi	It was such a long day that I slept early.
-103	structure	B2	in spite of + N/V-ing	mặc dù	In spite of being tired, he kept going.
-104	structure	B1	It's worth + V-ing	đáng để làm gì	It's worth checking first.
-105	structure	B2	can't help + V-ing	không thể không	I can't help laughing.
-106	structure	B1	look forward to + V-ing	mong chờ	I look forward to meeting you.
-107	structure	B1	be about to + V	sắp sửa	I was about to leave.
-108	structure	A2	keep + V-ing	tiếp tục làm gì	Keep going!
-109	structure	B2	end up + V-ing	kết cục lại là	We ended up walking home.
-110	structure	B1	come up with	nghĩ ra (ý tưởng)	She came up with a plan.
-111	structure	B2	put up with	chịu đựng	I can't put up with the noise.
-112	structure	A2	run out of	hết, cạn	We ran out of milk.
-113	structure	B1	get rid of	loại bỏ	I need to get rid of these boxes.
-114	structure	B2	take advantage of	tận dụng	Take advantage of the sale.
-115	structure	B2	make up for	bù đắp cho	Let me make up for it.
-116	structure	B1	be likely to + V	có khả năng sẽ	Prices are likely to rise.
-117	structure	B1	have trouble + V-ing	gặp khó khăn khi	I have trouble sleeping.
-118	structure	B2	there's no point in + V-ing	không có ích gì khi	There's no point in arguing.
-119	structure	B2	Would you mind + V-ing	bạn có phiền không	Would you mind waiting?
-120	structure	B1	prefer A to B	thích A hơn B	I prefer tea to coffee.
-121	structure	B1	spend time + V-ing	dành thời gian làm gì	I spend hours reading.
-122	structure	B2	be supposed to + V	đáng lẽ phải; được cho là	You're supposed to knock.
+id	type	level	pos	front	back	example
+1	word	B1	v	afford	có đủ khả năng (tài chính) để làm gì	We can't afford a new car this year.
+2	word	B1	v	allow	cho phép	My parents don't allow me to stay out late.
+3	word	B1	v	apply	nộp đơn; áp dụng	She applied for a job at the bank.
+4	word	B1	n,v	approach	cách tiếp cận; tiến lại gần	We need a different approach to this problem.
+5	word	B1	v	argue	tranh luận, tranh cãi	They argue about money all the time.
+6	word	B1	v	arrange	sắp xếp, thu xếp	I'll arrange a meeting for next week.
+7	word	B2	v	assume	cho rằng, mặc định là	I assumed you knew about the change.
+8	word	B1	n,v	attempt	cố gắng; nỗ lực	He made no attempt to hide his anger.
+9	word	A2	adj	available	có sẵn; rảnh	Is this table available?
+10	word	B1	v	avoid	tránh	Try to avoid rush hour.
+11	word	B1	n,v	benefit	lợi ích; có lợi	Everyone benefits from good sleep.
+12	word	B2	adj	brief	ngắn gọn	Let me give you a brief summary.
+13	word	B1	v,n	claim	khẳng định; đòi quyền lợi	He claims he wasn't there.
+14	word	A2	adj	common	phổ biến, thường gặp	That's a common mistake.
+15	word	B1	v	complain	phàn nàn	She complained about the noise.
+16	word	B1	n,v	concern	sự lo ngại; liên quan đến	My main concern is the cost.
+17	word	B1	v	consider	xem xét, cân nhắc	Have you considered moving?
+18	word	B1	v	contain	chứa	This drink contains no sugar.
+19	word	A2	adj	convenient	tiện lợi	Is 3pm convenient for you?
+20	word	B1	phr v	deal with	xử lý, giải quyết	I'll deal with it tomorrow.
+21	word	B1	v	deliver	giao (hàng); thực hiện đúng cam kết	They deliver on Sundays too.
+22	word	B1	v	deny	phủ nhận	He denied taking the money.
+23	word	A2	phr v	depend on	phụ thuộc vào	It depends on the weather.
+24	word	B1	v	describe	miêu tả	Can you describe him?
+25	word	B2	prep	despite	mặc dù	Despite the rain, we went out.
+26	word	B1	v	develop	phát triển	The city has developed quickly.
+27	word	B1	v	disappoint	làm thất vọng	I don't want to disappoint you.
+28	word	B1	n	effort	sự nỗ lực	Thanks for your effort.
+29	word	B1	v	encourage	khuyến khích, động viên	My teacher encouraged me to try.
+30	word	B1	v	ensure	đảm bảo	Please ensure the door is locked.
+31	word	B2	adv	eventually	cuối cùng thì (sau một thời gian)	He eventually agreed.
+32	word	B1	v	expect	mong đợi; dự kiến	I expect she'll be late.
+33	word	A2	adj	fair	công bằng	That's not fair!
+34	word	A2	adj	familiar	quen thuộc	Your face looks familiar.
+35	word	B1	phr v	figure out	tìm ra, hiểu ra	I can't figure out this problem.
+36	word	B1	phr v	focus on	tập trung vào	Let's focus on the main issue.
+37	word	B2	adj,adv	further	thêm nữa; xa hơn	Do you need further help?
+38	word	B1	v	gain	đạt được, tăng thêm	She gained a lot of experience.
+39	word	A2	v	guess	đoán	Guess what happened!
+40	word	B1	v	handle	xử lý, đối phó	She handled the situation well.
+41	word	B2	adv	hardly	hầu như không	I hardly know him.
+42	word	B1	v	hire	thuê (người)	They hired two new staff.
+43	word	B1	v	improve	cải thiện	My English is improving.
+44	word	B1	v	increase	tăng	Prices increased last month.
+45	word	B2	adv	indeed	thực sự, đúng vậy	It was indeed a mistake.
+46	word	B1	n,v	influence	ảnh hưởng	Weather influences my mood.
+47	word	B2	v	insist	khăng khăng, nhất quyết	He insisted on paying.
+48	word	A2	adv	instead	thay vào đó	Let's walk instead.
+49	word	B2	v	involve	liên quan, bao gồm	The job involves travelling.
+50	word	B1	v,n	lack	thiếu; sự thiếu hụt	He lacks confidence.
+51	word	B2	adj	likely	có khả năng	It's likely to rain.
+52	word	B1	v	manage to	xoay xở làm được	I managed to finish on time.
+53	word	B1	v	mention	đề cập, nhắc đến	She mentioned your name.
+54	word	A2	adj	necessary	cần thiết	It's not necessary to book.
+55	word	B1	adj	obvious	rõ ràng, hiển nhiên	The answer is obvious.
+56	word	B2	v	occur	xảy ra	The accident occurred at night.
+57	word	B1	n	opportunity	cơ hội	This is a great opportunity.
+58	word	B1	adj	particular	cụ thể, riêng biệt	Any particular reason?
+59	word	B1	phr v	point out	chỉ ra	She pointed out my mistake.
+60	word	A2	v	prefer	thích hơn	I prefer tea to coffee.
+61	word	B1	v	prevent	ngăn chặn	Exercise prevents illness.
+62	word	B1	v	provide	cung cấp	They provide free wifi.
+63	word	B1	n	purpose	mục đích	What's the purpose of this?
+64	word	B1	v	realize	nhận ra	I didn't realize it was late.
+65	word	B1	v	recommend	đề xuất, khuyên dùng	I recommend this place.
+66	word	B1	v	reduce	giảm	We need to reduce costs.
+67	word	B1	v	refuse	từ chối	He refused to help.
+68	word	B2	adj	regular	thường xuyên, đều đặn	I'm a regular customer.
+69	word	B2	phr v	rely on	dựa vào, tin cậy	You can rely on her.
+70	word	B1	v	remain	vẫn còn; ở lại	Many questions remain.
+71	word	B1	v	remind	nhắc nhở	Remind me to call him.
+72	word	B1	v	replace	thay thế	We replaced the old one.
+73	word	B1	v	require	yêu cầu, cần đến	This requires patience.
+74	word	B2	v	reveal	tiết lộ	He revealed the truth.
+75	word	B1	det	several	một vài	I called several times.
+76	word	A2	adj	similar	tương tự	They look similar.
+77	word	B1	v	solve	giải quyết	Let's solve this together.
+78	word	B2	adj,adv	straight	thẳng; ngay lập tức	Go straight ahead.
+79	word	B1	v	suggest	gợi ý, đề nghị	I suggest we wait.
+80	word	B1	adj	suitable	phù hợp	This isn't suitable for kids.
+81	word	B2	v	suppose	cho rằng, đoán	I suppose you're right.
+82	word	B2	v	tend to	có xu hướng	I tend to forget names.
+83	word	B2	adv	therefore	do đó, vì vậy	It rained; therefore we stayed in.
+84	word	B2	conj	though	mặc dù	It's cheap, though not great.
+85	word	B1	v	treat	đối xử; điều trị	Treat others with respect.
+86	word	B2	phr v	turn out	hoá ra là	It turned out to be fine.
+87	word	B2	conj	unless	trừ khi	I won't go unless you come.
+88	word	B1	adj	valuable	có giá trị	This is valuable advice.
+89	word	B2	adj	various	nhiều, đa dạng	We stopped for various reasons.
+90	word	B2	conj	whether	liệu ... có hay không	I don't know whether to go.
+91	word	B1	adj	worth	đáng giá	It's worth trying.
+92	structure	B1		used to + V	đã từng (nhưng nay không còn)	I used to smoke.
+93	structure	B2		be used to + V-ing	đã quen với việc	I'm used to getting up early.
+94	structure	B1		would rather + V	thà là, thích hơn	I'd rather stay home.
+95	structure	B1		had better + V	nên (khuyên mạnh)	You'd better see a doctor.
+96	structure	A2		as soon as	ngay khi	Call me as soon as you arrive.
+97	structure	B1		in case	đề phòng trường hợp	Take an umbrella in case it rains.
+98	structure	B2		no matter how/what	bất kể thế nào / cái gì	No matter how hard I try, it fails.
+99	structure	B1		the more ... the more	càng ... càng	The more I read, the more I learn.
+100	structure	B2		not only ... but also	không chỉ ... mà còn	Not only cheap but also good.
+101	structure	B2		so ... that	quá ... đến nỗi	It was so cold that I stayed in.
+102	structure	B2		such a ... that	một ... đến nỗi	It was such a long day that I slept early.
+103	structure	B2		in spite of + N/V-ing	mặc dù	In spite of being tired, he kept going.
+104	structure	B1		It's worth + V-ing	đáng để làm gì	It's worth checking first.
+105	structure	B2		can't help + V-ing	không thể không	I can't help laughing.
+106	structure	B1		look forward to + V-ing	mong chờ	I look forward to meeting you.
+107	structure	B1		be about to + V	sắp sửa	I was about to leave.
+108	structure	A2		keep + V-ing	tiếp tục làm gì	Keep going!
+109	structure	B2		end up + V-ing	kết cục lại là	We ended up walking home.
+110	structure	B1		come up with	nghĩ ra (ý tưởng)	She came up with a plan.
+111	structure	B2		put up with	chịu đựng	I can't put up with the noise.
+112	structure	A2		run out of	hết, cạn	We ran out of milk.
+113	structure	B1		get rid of	loại bỏ	I need to get rid of these boxes.
+114	structure	B2		take advantage of	tận dụng	Take advantage of the sale.
+115	structure	B2		make up for	bù đắp cho	Let me make up for it.
+116	structure	B1		be likely to + V	có khả năng sẽ	Prices are likely to rise.
+117	structure	B1		have trouble + V-ing	gặp khó khăn khi	I have trouble sleeping.
+118	structure	B2		there's no point in + V-ing	không có ích gì khi	There's no point in arguing.
+119	structure	B2		Would you mind + V-ing	bạn có phiền không	Would you mind waiting?
+120	structure	B1		prefer A to B	thích A hơn B	I prefer tea to coffee.
+121	structure	B1		spend time + V-ing	dành thời gian làm gì	I spend hours reading.
+122	structure	B2		be supposed to + V	đáng lẽ phải; được cho là	You're supposed to knock.
