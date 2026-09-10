@@ -1,15 +1,25 @@
 #!/usr/bin/env python3
-"""The vocab-display host: a JSON store, a small API, and the web UI that edits it.
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["pymongo>=4.18", "dnspython>=2.6"]
+# ///
+"""The vocab-display host: a MongoDB store, a small API, and the web UI that edits it.
 
-Standard library only, so it starts with `python3 host/server.py` and nothing else. The
-store is a single JSON file -- readable, diffable, and editable by hand if this program is
-ever in the way, which matters more than query performance for a few thousand rows.
+Runs with `uv run host/server.py` -- the dependency block above is all the setup there is,
+and uv builds the environment on the first run.
+
+MongoDB is the source of truth. `data/store.json` is kept as a mirror of it, refreshed on
+a timer, and is what the host falls back to reading when the database cannot be reached --
+the deck stays browsable on a dead link even though nothing can be written to it. The
+mirror is also the format this project used before, so it stays hand-readable and
+hand-editable if this program is ever in the way.
 
 The deck is not worked through front to back. Each day gets one fixed set -- words and
 sentence patterns interleaved -- and the board repeats that set all day; tomorrow gets a
-different one. Repetition inside a day is the point, so `seen` climbs into the hundreds
-and stops meaning anything: `days`, the count of distinct days an entry has appeared, is
-the signal worth reading and what tomorrow's set is chosen by.
+different one. Repetition inside a day is the point, which is why nothing counts showings:
+a card seen forty times in one afternoon has been practised once. `days`, the count of
+distinct days an entry has appeared, is the only progress number kept, and is what
+tomorrow's set is chosen by.
 
 Two audiences share the API:
 
@@ -24,6 +34,7 @@ Board requests carry a shared token; browser requests come from localhost and do
 token exists so that nothing else on the Wi-Fi can read or rewrite the deck, not as real
 authentication -- it travels in cleartext over HTTP on a home network.
 """
+import copy
 import json
 import os
 import unicodedata
@@ -33,19 +44,97 @@ import secrets
 import sys
 import tempfile
 import threading
+import time
 import urllib.parse
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from pymongo import MongoClient, ReplaceOne
+from pymongo.errors import PyMongoError
+
 ROOT = Path(__file__).resolve().parent.parent
-STORE = ROOT / "data" / "store.json"
+STORE = ROOT / "data" / "store.json"   # mirror of the database, not the source of truth
 SEED = ROOT / "data" / "seed.tsv"
 STATIC = Path(__file__).resolve().parent / "static"
 PORT = int(os.environ.get("VOCAB_PORT", 8788))
+# How often the mirror is refreshed from the database. Long, because the mirror exists to
+# survive a dead link rather than to be current: the board reports every few minutes and
+# rewriting the file more often than that would be churn for its own sake.
+MIRROR_INTERVAL_S = int(os.environ.get("VOCAB_MIRROR_SECONDS", 300))
+
+
+def load_env():
+    """Read KEY = VALUE lines from the first credentials file that exists.
+
+    Hand-rolled rather than pulled from python-dotenv: it is fifteen lines, and the
+    dependency list is worth keeping to the one thing that cannot be written by hand.
+    Real environment variables win, so a shell export can override the file.
+    """
+    for name in (".env", "atlas-credentials.env"):
+        path = ROOT / name
+        if not path.exists():
+            continue
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+load_env()
+MONGO_URI = os.environ.get("MONGODB_URI", "")
+MONGO_DB = os.environ.get("MONGODB_DB", "vocab_display")
+
+
+class StorageOffline(RuntimeError):
+    """The database is unreachable, so this request cannot be served from the mirror."""
 
 TYPES = ("word", "structure")
-LEVELS = ("A2", "B1", "B2")
+# A1 and C1 exist so an Oxford list can be imported without its ends being clipped;
+# the starter deck itself only spans A2 to B2.
+LEVELS = ("A1", "A2", "B1", "B2", "C1")
+# Parts of speech, for words only. Stored abbreviated because that is what filters, sorts
+# and the firmware's flash all want to be short; every surface that shows one to a person
+# spells it out. The set covers what Oxford's own lists tag words with, so an import does
+# not arrive carrying categories there is nowhere to put.
+POS_FULL = {
+    "n": "noun", "v": "verb", "adj": "adjective", "adv": "adverb",
+    "prep": "preposition", "conj": "conjunction", "det": "determiner",
+    "pron": "pronoun", "num": "number", "exclam": "exclamation",
+    "art": "article", "phr v": "phrasal verb", "modal v": "modal verb",
+    "aux v": "auxiliary verb",
+}
+POS_TAGS = tuple(POS_FULL)
+# Both directions are accepted on input, so "noun" typed into the web UI and "n." pasted
+# out of a word list land on the same stored value.
+POS_ALIASES = {full: tag for tag, full in POS_FULL.items()}
+POS_ALIASES.update({"indefinite article": "art", "definite article": "art"})
+
+
+def spell_pos(value):
+    '''"n,v" -> "noun, verb". The one place on the host where a tag becomes a word.'''
+    return ", ".join(POS_FULL.get(t, t) for t in value.split(",") if t)
+
+
+def clean_pos(value, kind="word"):
+    """Normalise a part-of-speech field to a comma-separated list of known tags.
+
+    A structure has no part of speech -- "used to + V" is a pattern, not a word class --
+    so it is always cleared rather than left to whatever a caller sent. Unknown tags are
+    dropped instead of rejecting the write: this arrives from a paste box and a bad tag
+    is not worth losing the entry over.
+    """
+    if kind == "structure":
+        return ""
+    tags = []
+    for tag in str(value or "").lower().replace(";", ",").replace("/", ",").split(","):
+        tag = " ".join(tag.split()).rstrip(".")
+        tag = POS_ALIASES.get(tag, tag)
+        if tag in POS_FULL and tag not in tags:
+            tags.append(tag)
+    return ",".join(tags)
 
 _lock = threading.Lock()
 
@@ -70,10 +159,10 @@ def load_seed():
             "id": int(row["id"]),
             "type": row["type"],
             "level": row["level"],
+            "pos": clean_pos(row.get("pos", ""), row["type"]),
             "front": row["front"],
             "back": row["back"],
             "example": row.get("example", ""),
-            "seen": 0,
             "days": 0,
             "known": False,
             "updated": now_iso(),
@@ -89,7 +178,7 @@ DEFAULT_CONFIG = {"daily_words": 8, "daily_structures": 4}
 
 def default_store():
     return {
-        "version": 2,
+        "version": 3,
         # Copied into the firmware's config.h. Regenerating it locks out any board still
         # using the old one, which is the point.
         "token": secrets.token_hex(8),
@@ -99,38 +188,177 @@ def default_store():
     }
 
 
+# --------------------------------------------------------------------------- the database
+
+# One client for the process. pymongo pools connections itself and is thread-safe, which
+# is what makes it safe to share across ThreadingHTTPServer's request threads.
+_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000,
+                      appname="vocab-display") if MONGO_URI else None
+_db = _client[MONGO_DB] if _client is not None else None
+_mirror_dirty = threading.Event()
+
+# Every handler works on the whole store, which meant every request pulled every document
+# out of Atlas: fine at 124 entries, about a second and a half at 900, and worse from
+# there. This process is the only writer, so its own copy is authoritative between writes;
+# the TTL is only a backstop for a second host or a migration script touching the same
+# database behind its back.
+STORE_CACHE_TTL_S = 5.0
+_cache = {"store": None, "at": 0.0}
+PERSISTED = ("id", "type", "level", "pos", "front", "back", "example",
+             "days", "known", "updated")
+
+
+def db_alive():
+    if _db is None:
+        return False
+    try:
+        _db.client.admin.command("ping")
+        return True
+    except PyMongoError:
+        return False
+
+
+def normalise(entry):
+    """One entry in the shape the rest of the program expects, whatever it was stored as.
+
+    Documents written before a field existed are just that field short, so defaults are
+    applied on the way out rather than by a migration pass -- the same in-place approach
+    the JSON store used, and the reason adding a column has never needed a schema step.
+    """
+    entry.setdefault("days", 0)
+    entry.setdefault("pos", "")
+    entry.setdefault("known", False)
+    entry.setdefault("example", "")
+    # `seen` counted how many times a card was pushed to the panel, which climbed past a
+    # hundred a day and distinguished nothing. Dropped in favour of `days`; documents that
+    # still carry it are read without it rather than being rewritten.
+    entry.pop("seen", None)
+    return entry
+
+
 def read_store():
+    """The whole store as one dict, from the database, or from the mirror if it is down.
+
+    Returning the same shape the JSON file had is deliberate: every handler below works on
+    that dict and none of them had to change when the storage underneath it did. Callers
+    get a copy, so a handler mutating what it was handed cannot corrupt the cache.
+    """
+    if _cache["store"] is not None and time.monotonic() - _cache["at"] < STORE_CACHE_TTL_S:
+        return copy.deepcopy(_cache["store"])
+    if _db is not None:
+        try:
+            meta = _db.meta.find_one({"_id": "state"})
+            entries = [normalise(e) for e in _db.entries.find({}, {"_id": 0})]
+            if meta is None and not entries:
+                store = default_store()
+                write_store(store)
+                return store
+            meta = meta or {}
+            store = {
+                "version": meta.get("version", 3),
+                "token": meta.get("token") or secrets.token_hex(8),
+                "config": meta.get("config") or dict(DEFAULT_CONFIG),
+                "daily": meta.get("daily") or {"date": "", "ids": []},
+                "entries": sorted(entries, key=lambda e: e["id"]),
+            }
+            _cache["store"], _cache["at"] = copy.deepcopy(store), time.monotonic()
+            return store
+        except PyMongoError as err:
+            sys.stderr.write(f"[db] read failed, falling back to the mirror: {err}\n")
+
     if not STORE.exists():
-        store = default_store()
-        write_store(store)
-        return store
+        raise StorageOffline("no database and no mirror to fall back to")
     store = json.loads(STORE.read_text(encoding="utf-8"))
-    # Migrate in place rather than versioning the reader: a store written before daily
-    # sets existed is just one missing key away from a current one.
     store.setdefault("config", dict(DEFAULT_CONFIG))
     store.setdefault("daily", {"date": "", "ids": []})
-    for entry in store["entries"]:
-        entry.setdefault("days", 0)
+    store["entries"] = [normalise(e) for e in store["entries"]]
+    store["offline"] = True   # read-only: write_store will refuse
     return store
 
 
 def write_store(store):
-    """Write through a temp file in the same directory, then rename.
+    """Persist the whole store to MongoDB, then flag the mirror as stale.
 
-    A half-written store is worse than a stale one: the deck plus every bit of progress
-    lives in this single file, and rename is the only step that is atomic.
+    Writing everything on every call keeps the contract the JSON file had, and at a few
+    hundred documents one bulk upsert costs less than the round trip that carries it.
+    Deletes are handled by removing whatever ids are no longer present, because an entry
+    that vanished from the dict has to vanish from the collection too.
+    """
+    if store.get("offline") or _db is None:
+        raise StorageOffline("the database is unreachable, so nothing can be written")
+    try:
+        ids = [e["id"] for e in store["entries"]]
+        # Only what actually changed. The board reports every few minutes and reshapes the
+        # daily set each time, which touched a dozen entries and rewrote nine hundred.
+        # Compared on the persisted fields only: /api/entries decorates what it hands back
+        # with `status` and `today`, and an entry that came back through a PUT would
+        # otherwise look changed on every request.
+        before = {e["id"]: {f: e.get(f) for f in PERSISTED}
+                  for e in (_cache["store"] or {}).get("entries", [])}
+        changed = [e for e in store["entries"]
+                   if before.get(e["id"]) != {f: e.get(f) for f in PERSISTED}]
+        if changed:
+            _db.entries.bulk_write(
+                [ReplaceOne({"_id": e["id"]}, {"_id": e["id"], **normalise(dict(e))},
+                            upsert=True) for e in changed],
+                ordered=False)
+        if before and set(before) - set(ids):
+            _db.entries.delete_many({"_id": {"$nin": ids}})
+        elif not before:
+            _db.entries.delete_many({"_id": {"$nin": ids}})
+        _db.meta.replace_one(
+            {"_id": "state"},
+            {"_id": "state", "version": store.get("version", 3), "token": store["token"],
+             "config": store["config"], "daily": store["daily"]},
+            upsert=True)
+    except PyMongoError as err:
+        _cache["store"] = None          # what is in the database is no longer known
+        raise StorageOffline(f"write failed: {err}") from err
+    _cache["store"] = copy.deepcopy({k: v for k, v in store.items() if k != "offline"})
+    _cache["at"] = time.monotonic()
+    _mirror_dirty.set()
+
+
+def write_mirror(store):
+    """Snapshot the store to data/store.json through a temp file, then rename.
+
+    A half-written mirror is worse than a stale one -- it is the only thing standing
+    between a dead database and a blank web UI -- and rename is the only atomic step.
     """
     STORE.parent.mkdir(parents=True, exist_ok=True)
+    snapshot = {k: v for k, v in store.items() if k != "offline"}
+    snapshot["mirrored"] = now_iso()
     fd, tmp = tempfile.mkstemp(dir=STORE.parent, prefix=".store-", suffix=".json")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(store, f, ensure_ascii=False, indent=1)
+            json.dump(snapshot, f, ensure_ascii=False, indent=1)
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, STORE)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise
+
+
+def mirror_loop():
+    """Refresh the mirror on a timer, and only when something actually changed.
+
+    A daemon thread rather than a write-through on every save: the board reports every few
+    minutes and rewriting the file on each one would be churn. Waiting on the flag means a
+    quiet host writes nothing at all.
+    """
+    while True:
+        _mirror_dirty.wait(MIRROR_INTERVAL_S)
+        if not _mirror_dirty.is_set():
+            continue
+        _mirror_dirty.clear()
+        try:
+            with _lock:
+                store = read_store()
+            if not store.get("offline"):
+                write_mirror(store)
+        except Exception as err:                       # a mirror is a nicety, never fatal
+            sys.stderr.write(f"[mirror] skipped: {err}\n")
 
 
 def next_id(entries):
@@ -148,13 +376,14 @@ def local_date():
 
 
 def by_priority(pool):
-    """Fewest days first, then fewest showings, shuffled within a tier.
+    """Fewest days first, shuffled within a tier.
 
-    Shuffling before the sort is what keeps ties unpredictable: sorting alone would hand
-    back the same order every day for the large group of entries that share a count.
+    Shuffling before the sort is what keeps ties unpredictable, and it does more work now
+    than it used to: with showings no longer counted there is no second key, so most of
+    the deck sits in one tier on nought days and the shuffle alone decides who is drawn.
     """
     random.shuffle(pool)
-    pool.sort(key=lambda e: (e["days"], e["seen"]))
+    pool.sort(key=lambda e: e["days"])
     return pool
 
 
@@ -268,12 +497,15 @@ def daily_cards(store):
 # ------------------------------------------------------------------------------ querying
 
 SEARCH_TOKEN = re.compile(
-    r'(-?)(?:(front|back|ex|example|any):)?(?:"([^"]*)"|(\S+))', re.IGNORECASE)
+    r'(-?)(?:(front|back|ex|example|pos|any):)?(?:"([^"]*)"|(\S+))', re.IGNORECASE)
 
+# `pos` is searchable but deliberately not part of `any`: a bare "v" would otherwise
+# match every verb in the deck and drown the term the search was actually for.
 FIELD_ALIASES = {"front": ("front",), "back": ("back",), "ex": ("example",),
-                 "example": ("example",), "any": ("front", "back", "example")}
+                 "example": ("example",), "pos": ("pos",),
+                 "any": ("front", "back", "example")}
 
-SORT_KEYS = ("id", "front", "back", "days", "seen", "level", "type", "updated")
+SORT_KEYS = ("id", "front", "back", "pos", "days", "level", "type", "updated")
 
 
 def fold(text):
@@ -307,7 +539,7 @@ def parse_search(query):
 
 def matches_search(entry, terms):
     for negate, fields, needle in terms:
-        hit = any(needle in fold(entry[f]) for f in fields)
+        hit = any(needle in fold(entry.get(f) or "") for f in fields)
         if hit == negate:
             return False
     return True
@@ -337,7 +569,6 @@ def stats(entries):
         "unseen": unseen,
         "words": sum(1 for e in entries if e["type"] == "word"),
         "structures": sum(1 for e in entries if e["type"] == "structure"),
-        "seen_total": sum(e["seen"] for e in entries),
     }
 
 
@@ -346,6 +577,23 @@ def stats(entries):
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "vocab-display"
+
+    def handle_one_request(self):
+        """Turn a dead database into a 503 rather than a stack trace and a dropped socket.
+
+        Every write goes through write_store, which raises before anything is sent, so
+        catching here is enough to answer properly. The board treats a non-200 as a miss
+        and falls back to its compiled deck after three of them, which is exactly the
+        behaviour wanted: a stale day is worse than an honest one.
+        """
+        try:
+            super().handle_one_request()
+        except StorageOffline as err:
+            try:
+                self.send_json({"error": "database unreachable", "detail": str(err),
+                                "readonly": True}, 503)
+            except Exception:
+                pass
 
     def log_message(self, fmt, *args):  # quieter than the default per-request noise
         if "/api/batch" not in self.path:
@@ -412,6 +660,7 @@ class Handler(BaseHTTPRequestHandler):
                 if ensure_daily(store):
                     write_store(store)
                 return self.send_json({
+                    "pos_full": POS_FULL,
                     "stats": stats(store["entries"]),
                     "token": store["token"],
                     "port": PORT,
@@ -436,6 +685,7 @@ class Handler(BaseHTTPRequestHandler):
                     "count": len(cards),
                     "remaining": stats(store["entries"])["remaining"],
                     "cards": [{"id": e["id"], "t": 1 if e["type"] == "structure" else 0,
+                               "p": e.get("pos", ""),
                                "f": e["front"], "b": e["back"], "e": e["example"]}
                               for e in cards],
                 })
@@ -452,6 +702,12 @@ class Handler(BaseHTTPRequestHandler):
                 levels = csv_param(self.query.get("level"))
                 if levels:
                     rows = [e for e in rows if e["level"] in levels]
+                # A word tagged "n,v" answers to both `pos=n` and `pos=v`, so an entry
+                # matches when any of its tags is asked for.
+                tags = csv_param(self.query.get("pos"))
+                if tags:
+                    rows = [e for e in rows
+                            if tags & set(filter(None, e.get("pos", "").split(",")))]
                 statuses = csv_param(self.query.get("status"))
                 if statuses:
                     rows = [e for e in rows if status_of(e) in statuses]
@@ -466,7 +722,7 @@ class Handler(BaseHTTPRequestHandler):
                 # Text columns sort folded so Vietnamese lands alphabetically; the id is
                 # always the tie-break so equal values keep a stable, repeatable order
                 # across pages rather than shuffling between requests.
-                if sort in ("front", "back", "level", "type"):
+                if sort in ("front", "back", "level", "type", "pos"):
                     key = lambda e: (fold(e[sort]), e["id"])
                 elif sort == "updated":
                     key = lambda e: (e["updated"], e["id"])
@@ -511,21 +767,19 @@ class Handler(BaseHTTPRequestHandler):
             if route == "/api/progress":
                 if not self.token_ok(store):
                     return self.send_json({"error": "bad token"}, 401)
-                # The board reports deltas, so showings accumulate and `known` is sticky
-                # -- never assigned, so a board cannot un-know something.
+                # `known` is sticky: set, never assigned, so a board cannot un-know
+                # something. It is the only thing the board reports now -- a repeated
+                # report is therefore idempotent, which the old showing count never was.
                 #
-                # Adding is not idempotent: a report whose response is lost gets re-sent
-                # and double-counts. That is tolerated because `seen` is a soft signal
-                # here. `days` is the number to trust -- the host increments it exactly
-                # once per day per entry, when it builds the set, and never takes the
-                # board's word for it.
+                # `days` is the number that matters and the board never touches it: the
+                # host increments it exactly once per day per entry, when it builds the
+                # set, and never takes the board's word for it.
                 by_id = {e["id"]: e for e in store["entries"]}
                 applied = 0
                 for item in body.get("cards", []):
                     entry = by_id.get(item.get("id"))
                     if not entry:
                         continue
-                    entry["seen"] += max(0, int(item.get("seen", 0)))
                     if item.get("known"):
                         entry["known"] = True
                     entry["updated"] = now_iso()
@@ -595,12 +849,14 @@ class Handler(BaseHTTPRequestHandler):
                     entry[field] = str(body[field]).strip()
             if body.get("type") in TYPES:
                 entry["type"] = body["type"]
+            if "pos" in body:
+                entry["pos"] = clean_pos(body["pos"], entry["type"])
+            elif body.get("type") == "structure":
+                entry["pos"] = ""
             if body.get("level") in LEVELS:
                 entry["level"] = body["level"]
             if "known" in body:
                 entry["known"] = bool(body["known"])
-            if "seen" in body:
-                entry["seen"] = max(0, int(body["seen"]))
             if "days" in body:
                 entry["days"] = max(0, int(body["days"]))
             entry["updated"] = now_iso()
@@ -632,21 +888,22 @@ class Handler(BaseHTTPRequestHandler):
             return "front and back are both required"
         if any(e["front"].lower() == front.lower() for e in entries):
             return f"{front!r} is already in the deck"
+        kind = body.get("type") if body.get("type") in TYPES else "word"
         return {
             "id": next_id(entries),
-            "type": body.get("type") if body.get("type") in TYPES else "word",
+            "type": kind,
             "level": body.get("level") if body.get("level") in LEVELS else "B1",
+            "pos": clean_pos(body.get("pos", ""), kind),
             "front": front,
             "back": back,
             "example": str(body.get("example", "")).strip(),
-            "seen": 0,
             "days": 0,
             "known": False,
             "updated": now_iso(),
         }
 
     def do_import(self, text, store):
-        """Bulk paste. Accepts tab or pipe separated `front <sep> back [<sep> example]`.
+        """Bulk paste. Accepts `front <sep> back [<sep> example [<sep> pos]]`, tab or pipe.
 
         Deliberately forgiving about the separator and column count -- this is a paste box,
         and rejecting the whole batch over one bad line would be the wrong trade. Bad lines
@@ -664,6 +921,7 @@ class Handler(BaseHTTPRequestHandler):
             entry = self.clean_entry(
                 {"front": parts[0], "back": parts[1],
                  "example": parts[2] if len(parts) > 2 else "",
+                 "pos": parts[3] if len(parts) > 3 else "",
                  "type": "structure" if re.search(r"\+|\.\.\.", parts[0]) else "word"},
                 store["entries"])
             if isinstance(entry, str):
@@ -675,11 +933,22 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    if not MONGO_URI:
+        sys.exit("no MONGODB_URI: put it in .env or atlas-credentials.env")
+    live = db_alive()
     with _lock:
         store = read_store()
     print(f"vocab-display host on http://localhost:{PORT}")
-    print(f"  store  {STORE}  ({len(store['entries'])} entries)")
+    if live:
+        print(f"  store  mongodb {MONGO_DB}  ({len(store['entries'])} entries)")
+        print(f"  mirror {STORE}  (every {MIRROR_INTERVAL_S}s when changed)")
+        threading.Thread(target=mirror_loop, daemon=True).start()
+        _mirror_dirty.set()          # one snapshot at startup, so the mirror is never stale
+    else:
+        print(f"  store  DATABASE UNREACHABLE -- read-only from the mirror {STORE}")
+        print(f"         ({len(store['entries'])} entries; writes will answer 503)")
     print(f"  token  {store['token']}   <- paste into firmware config.h")
     print(f"  daily  {store['config']['daily_words']} words + "
           f"{store['config']['daily_structures']} structures")
+    sys.stdout.flush()
     ThreadingHTTPServer(("", PORT), Handler).serve_forever()

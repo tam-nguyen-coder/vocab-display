@@ -9,6 +9,7 @@ const rowsEl = $("rows");
 const state = {
   q: "",
   type: new Set(),
+  pos: new Set(),
   level: new Set(),
   status: new Set(),
   daily: false,
@@ -18,7 +19,7 @@ const state = {
   page: 1,
 };
 
-const MULTI = ["type", "level", "status"];
+const MULTI = ["type", "pos", "level", "status"];
 let entries = [];
 let inFlight = 0;
 
@@ -115,7 +116,7 @@ function syncControls() {
 const STAT_LABELS = [
   ["remaining", "left", true],
   ["known", "known", false],
-  ["unseen", "never shown", false],
+  ["unseen", "never appeared", false],
   ["total", "total", false],
   ["words", "words", false],
   ["structures", "structures", false],
@@ -134,7 +135,8 @@ function renderToday(daily, config) {
 }
 
 async function loadStats() {
-  const { stats, token, daily, config } = await api("/api/stats");
+  const { stats, token, daily, config, pos_full } = await api("/api/stats");
+  if (pos_full) POS_FULL = pos_full;
   $("token").textContent = token;
   $("stats").innerHTML = STAT_LABELS
     .map(([key, label, accent]) =>
@@ -187,6 +189,19 @@ function highlight(text, field) {
 
 const STATUS_LABEL = { unseen: "unseen", learning: "learning", known: "known" };
 
+// Filled from /api/stats. Entries store "n,v" because that is what filters and the
+// firmware's flash want to be short; nothing shows a person an abbreviation.
+let POS_FULL = {};
+// refresh() runs the two fetches in parallel, so rows could be built before the names
+// arrived and a cell would show the stored "n,v" for one frame. Fetched once and awaited
+// by the row builder instead, which is cheap after the first call and never flickers.
+let posNamesReady = null;
+const ensurePosNames = () => (posNamesReady ??= api("/api/stats")
+  .then((d) => { if (d.pos_full) POS_FULL = d.pos_full; })
+  .catch(() => {}));
+const spellPos = (value) =>
+  (value || "").split(",").filter(Boolean).map((t) => POS_FULL[t] || t).join(", ");
+
 function rowHtml(e) {
   const nextType = e.type === "word" ? "structure" : "word";
   return `<tr data-id="${e.id}" class="${e.known ? "known" : ""}${e.today ? " today" : ""}">
@@ -196,6 +211,10 @@ function rowHtml(e) {
         >${e.type === "word" ? "word" : "structure"}</span>
       <span class="badge level" data-cycle-level title="Cycle level">${e.level}</span>
     </td>
+    <td><div class="cellwrap"><input class="cell pos" value="${escapeHtml(e.pos || "")}"
+        data-field="pos" aria-label="part of speech"
+        placeholder="${e.type === "structure" ? "" : "\u2013"}"><div class="hl pos"
+        >${escapeHtml(spellPos(e.pos))}</div></div></td>
     <td><div class="cellwrap"><input class="cell front" value="${escapeHtml(e.front)}"
         data-field="front" aria-label="term"><div class="hl front"
         >${highlight(e.front, "front")}</div></div></td>
@@ -206,7 +225,6 @@ function rowHtml(e) {
         data-field="example" aria-label="example"><div class="hl example"
         >${highlight(e.example, "example")}</div></div></td>
     <td class="num">${e.days}</td>
-    <td class="num dim">${e.seen}</td>
     <td class="num"><input type="checkbox" data-field="known" ${e.known ? "checked" : ""}
         title="${STATUS_LABEL[e.status]}"></td>
     <td class="actions"><button class="icon" data-delete title="Delete">&times;</button></td>
@@ -214,6 +232,7 @@ function rowHtml(e) {
 }
 
 async function loadEntries() {
+  await ensurePosNames();
   const token = ++inFlight;
   $("table").classList.add("busy");
   const data = await api(`/api/entries?${stateToParams()}`);
@@ -365,7 +384,7 @@ document.querySelector("thead").addEventListener("click", (event) => {
     state.dir = state.dir === "asc" ? "desc" : "asc";
   } else {
     state.sort = th.dataset.sort;
-    state.dir = ["days", "seen"].includes(state.sort) ? "desc" : "asc";
+    state.dir = state.sort === "days" ? "desc" : "asc";
   }
   syncControls();
   apply();
@@ -421,6 +440,7 @@ async function addEntry() {
     front: $("add-front").value.trim(),
     back: $("add-back").value.trim(),
     example: $("add-example").value.trim(),
+    pos: $("add-pos").value.trim(),
     type: $("add-type").value,
     level: $("add-level").value,
   };
@@ -428,7 +448,8 @@ async function addEntry() {
   try {
     const { entry } = await api("/api/entries", { method: "POST", body: JSON.stringify(body) });
     toast(`Added "${entry.front}" (id ${entry.id})`);
-    $("add-front").value = $("add-back").value = $("add-example").value = "";
+    $("add-front").value = $("add-back").value = $("add-example").value =
+      $("add-pos").value = "";
     $("add-front").focus();
     await refresh();
   } catch (err) {
@@ -437,7 +458,7 @@ async function addEntry() {
 }
 
 $("add-submit").addEventListener("click", addEntry);
-for (const id of ["add-front", "add-back", "add-example"]) {
+for (const id of ["add-front", "add-back", "add-example", "add-pos"]) {
   $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") addEntry(); });
 }
 

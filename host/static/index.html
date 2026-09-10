@@ -56,11 +56,24 @@
       <button class="pill" data-value="word">word</button>
       <button class="pill" data-value="structure">structure</button>
     </div>
+    <div class="group" id="f-pos" data-key="pos">
+      <span class="glabel">Part of speech</span>
+      <button class="pill" data-value="n">noun</button>
+      <button class="pill" data-value="v">verb</button>
+      <button class="pill" data-value="adj">adjective</button>
+      <button class="pill" data-value="adv">adverb</button>
+      <button class="pill" data-value="phr v">phrasal verb</button>
+      <button class="pill" data-value="prep">preposition</button>
+      <button class="pill" data-value="conj">conjunction</button>
+      <button class="pill" data-value="det">determiner</button>
+    </div>
     <div class="group" id="f-level" data-key="level">
       <span class="glabel">Level</span>
+      <button class="pill" data-value="A1">A1</button>
       <button class="pill" data-value="A2">A2</button>
       <button class="pill" data-value="B1">B1</button>
       <button class="pill" data-value="B2">B2</button>
+      <button class="pill" data-value="C1">C1</button>
     </div>
     <div class="group" id="f-status" data-key="status">
       <span class="glabel">Status</span>
@@ -85,6 +98,15 @@
   </div>
   <div class="row">
     <input type="search" id="add-example" placeholder="example sentence (English)" style="flex:1">
+    <input type="search" id="add-pos" placeholder="part of speech" style="width:11rem"
+           list="pos-options" autocomplete="off">
+    <datalist id="pos-options">
+      <option value="noun"><option value="verb"><option value="adjective">
+      <option value="adverb"><option value="noun, verb"><option value="phrasal verb">
+      <option value="preposition"><option value="conjunction"><option value="determiner">
+      <option value="pronoun"><option value="number"><option value="exclamation">
+      <option value="article"><option value="modal verb"><option value="auxiliary verb">
+    </datalist>
     <select id="add-type"><option value="word">word</option><option value="structure">structure</option></select>
     <select id="add-level"><option>A2</option><option selected>B1</option><option>B2</option></select>
     <button class="primary" id="add-submit">Add</button>
@@ -94,7 +116,7 @@
 <section class="panel" id="import-panel" hidden>
   <h2>Bulk import</h2>
   <p>One entry per line, separated by a tab or a <code>|</code>:
-     <code>front | back | example</code>. Lines starting with <code>#</code> are skipped.
+     <code>front | back | example | pos</code>. Lines starting with <code>#</code> are skipped.
      Terms already in the deck are left alone rather than overwritten.</p>
   <textarea id="import-text" spellcheck="false"
     placeholder="reluctant | ngần ngừ, không muốn | She was reluctant to answer.&#10;on behalf of | thay mặt cho | I speak on behalf of the team."></textarea>
@@ -107,19 +129,19 @@
 <div class="wrap">
   <table id="table">
     <colgroup>
-      <col class="c-id"><col class="c-type"><col class="c-front"><col class="c-back">
-      <col class="c-example"><col class="c-num"><col class="c-num"><col class="c-known">
+      <col class="c-id"><col class="c-type"><col class="c-pos"><col class="c-front"><col class="c-back">
+      <col class="c-example"><col class="c-num"><col class="c-known">
       <col class="c-actions">
     </colgroup>
     <thead>
       <tr>
         <th class="sortable num" data-sort="id">id</th>
         <th class="sortable" data-sort="type">type</th>
+        <th class="sortable" data-sort="pos" title="blank for a pattern">part of speech</th>
         <th class="sortable" data-sort="front">term</th>
         <th class="sortable" data-sort="back">meaning</th>
         <th>example</th>
         <th class="sortable num" data-sort="days" title="distinct days this entry has appeared">days</th>
-        <th class="sortable num" data-sort="seen" title="total times it has been shown">shown</th>
         <th class="num">known</th>
         <th></th>
       </tr>

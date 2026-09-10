@@ -43,6 +43,7 @@ def main(src, dst):
         "  uint16_t id;        // stable across edits; saved progress is keyed off it",
         "  uint8_t  type;",
         "  uint8_t  level;",
+        "  const char *pos;    // \"v\", \"n,v\", \"phr v\"; empty for a structure",
         "  const char *front;  // English term or pattern",
         "  const char *back;   // Vietnamese meaning",
         "  const char *example;",
@@ -55,6 +56,7 @@ def main(src, dst):
     for r in rows:
         out.append(
             f'  {{{r["id"]}, {TYPES[r["type"]]}, {LEVELS[r["level"]]}, '
+            f'"{escape(r.get("pos", ""))}", '
             f'"{escape(r["front"])}", "{escape(r["back"])}", "{escape(r["example"])}"}},'
         )
     out += ["};", ""]

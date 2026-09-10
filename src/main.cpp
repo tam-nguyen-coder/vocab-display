@@ -95,11 +95,11 @@ static const int MAX_BATCH = 40;
 struct Card {
   uint16_t id;
   uint8_t type;
+  const char *pos;    // "v", "n,v", "phr v"; empty for a structure
   const char *front;
   const char *back;
   const char *example;
   int16_t deckIndex;  // -1 for a fetched card: only compiled entries have NVS progress
-  uint8_t seen;       // this session, reported to the host and then cleared
   bool known;
 };
 
@@ -124,11 +124,11 @@ static const char *arenaCopy(const char *text) {
 
 // ------------------------------------------------------------------------ offline state
 
-// One byte per compiled entry: the top bit marks "known, never show again", the rest
-// counts how many times it has come up. 122 entries is 122 bytes, so the whole thing is
-// one small NVS blob rather than a key per entry.
+// One byte per compiled entry, of which only the top bit is used: "known, never show
+// again". The lower seven once counted showings and no longer do -- but the byte stays a
+// byte, because loadProgress() wipes the blob whenever its size changes and narrowing
+// this would throw away every mark already saved to buy back 15 bytes.
 static const uint8_t KNOWN_BIT = 0x80;
-static const uint8_t SEEN_MASK = 0x7F;
 uint8_t progress[DECK_COUNT];
 
 Preferences prefs;
@@ -225,14 +225,6 @@ uint8_t rotation = SCREEN_ROTATION;
 // ------------------------------------------------------------------------------ helpers
 
 static bool isKnown(uint16_t index) { return progress[index] & KNOWN_BIT; }
-static uint8_t seenCount(uint16_t index) { return progress[index] & SEEN_MASK; }
-
-static void noteSeenOffline(uint16_t index) {
-  if (seenCount(index) < SEEN_MASK) {
-    progress[index] = (progress[index] & KNOWN_BIT) | (seenCount(index) + 1);
-    progressDirty = true;
-  }
-}
 
 static uint16_t offlineRemaining() {
   uint16_t n = 0;
@@ -293,8 +285,9 @@ static void fillFromDeck() {
     if (bagPos >= bagSize) refillBag();
     if (bagSize == 0) break;
     uint16_t index = bag[bagPos++];
-    cards[cardCount++] = {DECK[index].id, DECK[index].type, DECK[index].front,
-                          DECK[index].back, DECK[index].example, (int16_t)index, 0, false};
+    cards[cardCount++] = {DECK[index].id, DECK[index].type, DECK[index].pos,
+                          DECK[index].front, DECK[index].back, DECK[index].example,
+                          (int16_t)index, false};
   }
   cardPos = -1;
   source = SOURCE_OFFLINE;
@@ -361,11 +354,10 @@ static void reportProgress() {
   JsonDocument doc;
   JsonArray list = doc["cards"].to<JsonArray>();
   for (uint16_t i = 0; i < cardCount; i++) {
-    if (cards[i].seen == 0 && !cards[i].known) continue;
+    if (!cards[i].known) continue;
     JsonObject item = list.add<JsonObject>();
     item["id"] = cards[i].id;
-    item["seen"] = cards[i].seen;
-    if (cards[i].known) item["known"] = true;
+    item["known"] = true;
   }
   if (list.size() == 0) return;
 
@@ -376,17 +368,15 @@ static void reportProgress() {
     remainingReported = reply["remaining"] | remainingReported;
     unreportedCards = 0;
     reportBackoffUntilMs = 0;
-    // Cleared only on success, so an unsent delta is re-sent next time. The host merges,
-    // taking the larger seen count and never un-setting known, so repeating a delta is
-    // harmless -- but a mark made while the host is asleep is lost if the board reboots
-    // before it syncs. The word simply comes back around to be marked again.
-    // Both flags are cleared, not just the count. Leaving `known` set meant one press --
-    // or one phantom pulse -- was re-asserted on every later report, so un-ticking the
-    // entry in the web UI just saw the board set it again a few cards later.
-    for (uint16_t i = 0; i < cardCount; i++) {
-      cards[i].seen = 0;
-      cards[i].known = false;
-    }
+    // Cleared only on success, so an unsent mark is re-sent next time. The host never
+    // un-sets known, so repeating a report is harmless and -- now that a showing count no
+    // longer rides along -- exactly idempotent. A mark made while the host is asleep is
+    // still lost if the board reboots before it syncs; the word simply comes back around
+    // to be marked again.
+    // Cleared after a successful send. Leaving `known` set meant one press -- or one
+    // phantom pulse -- was re-asserted on every later report, so un-ticking the entry in
+    // the web UI just saw the board set it again a few cards later.
+    for (uint16_t i = 0; i < cardCount; i++) cards[i].known = false;
   } else {
     reportBackoffUntilMs = millis() + REPORT_BACKOFF_MS;
   }
@@ -419,12 +409,13 @@ static bool fetchBatch() {
   strlcpy(batchDate, doc["date"] | "", sizeof(batchDate));
   for (JsonObject item : doc["cards"].as<JsonArray>()) {
     if (cardCount >= MAX_BATCH) break;
+    const char *pos = arenaCopy(item["p"] | "");
     const char *front = arenaCopy(item["f"] | "");
     const char *back = arenaCopy(item["b"] | "");
     const char *example = arenaCopy(item["e"] | "");
-    if (!front || !back || !example) break;  // arena full: keep what fits
+    if (!pos || !front || !back || !example) break;  // arena full: keep what fits
     cards[cardCount++] = {(uint16_t)(item["id"] | 0), (uint8_t)(item["t"] | 0),
-                          front, back, example, -1, 0, false};
+                          pos, front, back, example, -1, false};
   }
 
   if (cardCount == 0) return false;
@@ -440,8 +431,6 @@ static bool fetchBatch() {
 
 static void nextCard() {
   if (cardPos >= 0 && cardPos < (int16_t)cardCount) {
-    cards[cardPos].seen++;  // reset per card on a successful report, so this is a delta
-    if (cards[cardPos].deckIndex >= 0) noteSeenOffline(cards[cardPos].deckIndex);
     if (source == SOURCE_HOST && ++unreportedCards >= REPORT_EVERY) reportProgress();
   }
 
@@ -535,14 +524,69 @@ static int wrapText(const char *text, int maxWidth, char lines[][64], int maxLin
 // Only one smooth font can be loaded per drawing target at a time, so every text run
 // below is bracketed by loadFont/unloadFont. That is cheap here because text is redrawn
 // only when the card or its side changes -- a few times every six seconds, not per frame.
+// Parts of speech are stored short -- "n,v" -- because that is what keeps 122 of them
+// cheap in flash, and spelled out here because "noun" tells a learner something that "n."
+// only gestures at. Kept in step with POS_FULL in host/server.py; the board sees whichever
+// tags the host sends, so an unknown one is printed as it arrived rather than dropped.
+struct PosName { const char *tag; const char *full; };
+static const PosName POS_NAMES[] = {
+  {"n", "noun"},       {"v", "verb"},         {"adj", "adjective"},
+  {"adv", "adverb"},   {"prep", "preposition"}, {"conj", "conjunction"},
+  {"det", "determiner"}, {"pron", "pronoun"}, {"num", "number"},
+  {"exclam", "exclamation"}, {"art", "article"}, {"phr v", "phrasal verb"},
+  {"modal v", "modal verb"}, {"aux v", "auxiliary verb"},
+};
+
+// Writes "noun, verb" (full) or "n, v" (short) into `out`, always NUL-terminated and
+// never past `size`.
+static void posLabel(const char *pos, bool full, char *out, size_t size) {
+  size_t used = 0;
+  for (const char *part = pos; *part && used + 1 < size; ) {
+    const char *comma = strchr(part, ',');
+    size_t len = comma ? (size_t)(comma - part) : strlen(part);
+    const char *text = part;
+    size_t textLen = len;
+    if (full) {
+      for (const PosName &name : POS_NAMES) {
+        if (strlen(name.tag) == len && strncmp(name.tag, part, len) == 0) {
+          text = name.full;
+          textLen = strlen(name.full);
+          break;
+        }
+      }
+    }
+    if (used && used + 2 < size) { out[used++] = ','; out[used++] = ' '; }
+    for (size_t i = 0; i < textLen && used + 1 < size; i++) out[used++] = text[i];
+    if (!comma) break;
+    part = comma + 1;
+  }
+  out[used] = '\0';
+}
+
 static void drawHeader(const Card &card) {
   canvas.loadFont(fontSmall);
-  canvas.setTextDatum(TL_DATUM);
-  canvas.setTextColor(card.type == TYPE_STRUCTURE ? COLOR_STRUCTURE : COLOR_WORD, COLOR_BG);
-  canvas.drawString(card.type == TYPE_STRUCTURE ? "structure" : "word", MARGIN, 6);
 
   char counter[16];
   snprintf(counter, sizeof(counter), "%u left", remainingReported);
+
+  // The counter is measured before the label is chosen, because what is left over is what
+  // decides whether the part of speech can be spelled out. "adjective, adverb" does not
+  // fit beside "115 left"; "adj, adv" does. Same rule the term itself is set by: the
+  // largest form that fits, and only then a smaller one.
+  char label[40];
+  const char *text = "word";
+  if (card.type == TYPE_STRUCTURE) {
+    text = "structure";
+  } else if (card.pos && card.pos[0]) {
+    const int room = SCREEN_W - 2 * MARGIN - canvas.textWidth(counter) - 10;
+    posLabel(card.pos, true, label, sizeof(label));
+    if (canvas.textWidth(label) > room) posLabel(card.pos, false, label, sizeof(label));
+    text = label;
+  }
+  canvas.setTextDatum(TL_DATUM);
+  canvas.setTextColor(card.type == TYPE_STRUCTURE ? COLOR_STRUCTURE : COLOR_WORD, COLOR_BG);
+  canvas.drawString(text, MARGIN, 6);
+
   canvas.setTextDatum(TR_DATUM);
   canvas.setTextColor(COLOR_DIM, COLOR_BG);
   canvas.drawString(counter, SCREEN_W - MARGIN, 6);

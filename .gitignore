@@ -12,3 +12,10 @@ include/fonts/
 
 __pycache__/
 *.pyc
+data/backups/
+.env
+*.env
+atlas-credentials.env
+
+# Oxford word lists: third-party copyrighted PDFs, kept locally as import sources.
+resources/*.pdf
