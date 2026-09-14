@@ -98,6 +98,16 @@ repeats it all day; tomorrow draws another, chosen from whatever has been practi
 and every answer has to be the same set, or the day stops being a day. The day boundary is
 the host's local date, since the host runs on the same machine as the person.
 
+**A day only counts if you were at the desk.** `days` used to be incremented whenever the
+host built a set, which is not the same thing at all: a weekend with the board plugged in
+and nobody in the room burned twenty-four entries that were never read, and they sorted as
+practised ever after. Working days are now configurable -- Monday to Friday by default --
+and on a rest day the host builds nothing, counts nothing, and tells the board to go dark.
+
+The board keeps its own clock over NTP and caches the schedule in NVS, because the weekend
+is exactly when the host is a closed laptop. It decides for itself whether to sleep, and
+leans towards being on: an unsynced clock shows words rather than risking a dark Monday.
+
 **`days` is the only progress number, and that is on purpose.** An earlier version also
 counted showings, which passed a hundred within hours and distinguished nothing: a card
 stared at forty times in one afternoon has been practised once, not forty times. `days`
@@ -308,6 +318,7 @@ compiled into flash as the floor the board drops to when the host is gone.
 | Host loss | two drained cycles replay today's set, the third falls back to the compiled deck |
 | Database loss | host serves the deck read-only from the mirror; every write answers `503` |
 | Deck at 3,043 | first request loads the whole store in ~2s, every one after it in ~8ms |
+| Rest day | five batch requests in a row left every `days` count untouched |
 
 Wi-Fi, HTTPClient, mDNS and ArduinoJson together put the app at 92% of the default 1.31 MB
 partition — too little headroom to add anything — so `platformio.ini` switches to
@@ -348,7 +359,7 @@ in cleartext over HTTP on a home network and is not real authentication.
 | `PUT`/`DELETE /api/entries/<id>` | browser | edit in place, or remove |
 | `POST /api/entries` | browser | add one |
 | `POST /api/import` | browser | paste tab- or pipe-separated lines in bulk (`front`, `back`, `example`, `pos`) |
-| `POST /api/config` | browser | how many words and patterns a day holds |
+| `POST /api/config` | browser | how many words and patterns a day holds, and which days count |
 | `POST /api/rebuild-daily` | browser | discard today's set and draw another |
 | `GET /api/stats` | browser | counts, today's set, and the token |
 
