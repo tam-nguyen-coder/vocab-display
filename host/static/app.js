@@ -96,6 +96,9 @@ function syncControls() {
   $("per").value = String(state.per);
   for (const group of document.querySelectorAll(".group")) {
     const key = group.dataset.key;
+    // The working-days picker borrows .group for its layout but is a setting, not a
+    // filter -- it has no state key and syncs from the config instead.
+    if (!key) continue;
     for (const pill of group.querySelectorAll(".pill")) {
       const on = key === "daily" ? state.daily : state[key].has(pill.dataset.value);
       pill.classList.toggle("on", on);
@@ -129,13 +132,21 @@ function renderToday(daily, config) {
   for (const [id, key] of [["cfg-words", "daily_words"], ["cfg-structures", "daily_structures"]]) {
     if (document.activeElement !== $(id)) $(id).value = config[key];
   }
+  const working = new Set(config.working_days || []);
+  for (const pill of document.querySelectorAll("#cfg-days .pill")) {
+    pill.classList.toggle("on", working.has(Number(pill.dataset.day)));
+  }
   $("today-chips").innerHTML = daily.entries.map((e) =>
     `<span class="chip ${e.type}"><span class="dot"></span>${escapeHtml(e.front)}` +
     `<span class="days">${e.days}d</span></span>`).join("");
 }
 
 async function loadStats() {
-  const { stats, token, daily, config, pos_full } = await api("/api/stats");
+  const { stats, token, daily, config, pos_full, rest_today } = await api("/api/stats");
+  // A day off is not a fault, so it is stated once and quietly: the set below is simply
+  // the last working day's, and nothing is being counted against it.
+  const banner = $("rest-banner");
+  if (banner) banner.hidden = !rest_today;
   if (pos_full) POS_FULL = pos_full;
   $("token").textContent = token;
   $("stats").innerHTML = STAT_LABELS
@@ -477,13 +488,23 @@ $("import-submit").addEventListener("click", async () => {
 
 // --------------------------------------------------------------------------- daily set
 
+$("cfg-days").addEventListener("click", (e) => {
+  const pill = e.target.closest(".pill");
+  if (pill) pill.classList.toggle("on");
+});
+
 $("cfg-apply").addEventListener("click", async () => {
+  const days = [...document.querySelectorAll("#cfg-days .pill.on")]
+    .map((p) => Number(p.dataset.day));
   const body = {
     daily_words: Number($("cfg-words").value),
     daily_structures: Number($("cfg-structures").value),
+    working_days: days,
   };
   await api("/api/config", { method: "POST", body: JSON.stringify(body) });
-  toast(`${body.daily_words} words + ${body.daily_structures} structures a day`);
+  const names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  toast(`${body.daily_words} words + ${body.daily_structures} structures on ` +
+        (days.length === 7 ? "every day" : days.map((d) => names[d]).join(", ") || "no days"));
   await refresh();
 });
 

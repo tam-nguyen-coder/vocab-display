@@ -24,9 +24,21 @@
     <span class="spacer"></span>
     <label>words <input type="number" id="cfg-words" min="0" max="60" step="1"></label>
     <label>structures <input type="number" id="cfg-structures" min="0" max="60" step="1"></label>
+    <span class="glabel" style="margin-left:14px">Days at the desk</span>
+    <div class="group" id="cfg-days">
+      <button class="pill" data-day="0">Mon</button>
+      <button class="pill" data-day="1">Tue</button>
+      <button class="pill" data-day="2">Wed</button>
+      <button class="pill" data-day="3">Thu</button>
+      <button class="pill" data-day="4">Fri</button>
+      <button class="pill" data-day="5">Sat</button>
+      <button class="pill" data-day="6">Sun</button>
+    </div>
     <button id="cfg-apply">Apply</button>
     <button id="rebuild">Draw again</button>
   </div>
+  <p class="hint" id="rest-banner" hidden>Today is a day off, so no set was drawn and
+     nothing is being counted. The panel is dark until the next working day.</p>
   <p class="hint">The device repeats this set all day; tomorrow draws a different one.</p>
   <div class="chips" id="today-chips"></div>
 </section>

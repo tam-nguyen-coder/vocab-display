@@ -173,7 +173,12 @@ def load_seed():
 # Twelve entries cycle in about three minutes at the device's pacing, so a desk-bound day
 # shows each one dozens of times. That is the intended dose: ambient repetition of a small
 # set, not a march through the deck.
-DEFAULT_CONFIG = {"daily_words": 8, "daily_structures": 4}
+# Monday is 0, matching datetime.weekday(). A day not in this list never gets a set built
+# for it, which is the whole point: `days` counts days an entry has been *practised*, and
+# a set drawn for a desk nobody sat at was never practised. Before this existed, a weekend
+# quietly burned 24 entries the reader never saw.
+DEFAULT_CONFIG = {"daily_words": 8, "daily_structures": 4,
+                  "working_days": [0, 1, 2, 3, 4]}
 
 
 def default_store():
@@ -254,10 +259,13 @@ def read_store():
                 write_store(store)
                 return store
             meta = meta or {}
+            config = meta.get("config") or {}
+            for field, value in DEFAULT_CONFIG.items():
+                config.setdefault(field, value)
             store = {
                 "version": meta.get("version", 3),
                 "token": meta.get("token") or secrets.token_hex(8),
-                "config": meta.get("config") or dict(DEFAULT_CONFIG),
+                "config": config,
                 "daily": meta.get("daily") or {"date": "", "ids": []},
                 "entries": sorted(entries, key=lambda e: e["id"]),
             }
@@ -270,6 +278,8 @@ def read_store():
         raise StorageOffline("no database and no mirror to fall back to")
     store = json.loads(STORE.read_text(encoding="utf-8"))
     store.setdefault("config", dict(DEFAULT_CONFIG))
+    for field, value in DEFAULT_CONFIG.items():
+        store["config"].setdefault(field, value)
     store.setdefault("daily", {"date": "", "ids": []})
     store["entries"] = [normalise(e) for e in store["entries"]]
     store["offline"] = True   # read-only: write_store will refuse
@@ -375,6 +385,17 @@ def local_date():
     return datetime.now().strftime("%Y-%m-%d")
 
 
+def is_rest_day(config, when=None):
+    """True on a day the reader is not at the desk, so no set is built and nothing counts.
+
+    An empty `working_days` is read as "every day is a working day" rather than "never
+    work again": a config edit that clears the list by accident should not silently stop
+    the deck forever.
+    """
+    days = config.get("working_days") or list(range(7))
+    return (when or datetime.now()).weekday() not in days
+
+
 def by_priority(pool):
     """Fewest days first, shuffled within a tier.
 
@@ -422,6 +443,10 @@ def ensure_daily(store):
     requests must return the same set or the day stops being a day.
     """
     today = local_date()
+    # On a rest day the day simply does not advance: yesterday's set stays recorded, no
+    # entry is claimed, and the board is told to go dark rather than shown a set.
+    if is_rest_day(store["config"]):
+        return False
     if store["daily"].get("date") != today:
         store["daily"] = build_daily(store, today)
         return True
@@ -661,6 +686,7 @@ class Handler(BaseHTTPRequestHandler):
                     write_store(store)
                 return self.send_json({
                     "pos_full": POS_FULL,
+                    "rest_today": is_rest_day(store["config"]),
                     "stats": stats(store["entries"]),
                     "token": store["token"],
                     "port": PORT,
@@ -677,10 +703,21 @@ class Handler(BaseHTTPRequestHandler):
                 # a different set: the answer is today's day, whoever asks and however
                 # often.
                 limit = min(int(self.query.get("n", [40])[0]), 100)
+                # `working_days` rides along on every batch so the board can keep its own
+                # counsel: the host is a laptop that sleeps at the weekend, which is
+                # exactly when the board most needs to know it is a rest day.
+                if is_rest_day(store["config"]):
+                    return self.send_json({
+                        "date": local_date(), "rest": True, "count": 0, "cards": [],
+                        "working_days": store["config"].get("working_days", []),
+                        "remaining": stats(store["entries"])["remaining"],
+                    })
                 if ensure_daily(store):
                     write_store(store)
                 cards = daily_cards(store)[:limit]
                 return self.send_json({
+                    "rest": False,
+                    "working_days": store["config"].get("working_days", []),
                     "date": store["daily"]["date"],
                     "count": len(cards),
                     "remaining": stats(store["entries"])["remaining"],
@@ -810,6 +847,9 @@ class Handler(BaseHTTPRequestHandler):
                 for field in ("daily_words", "daily_structures"):
                     if field in body:
                         config[field] = max(0, min(60, int(body[field])))
+                if "working_days" in body:
+                    config["working_days"] = sorted({int(d) for d in body["working_days"]
+                                                     if 0 <= int(d) <= 6})
                 # Resize today's set immediately rather than waiting for tomorrow --
                 # changing the dose and seeing nothing change would read as a broken input.
                 reshape_daily(store)
