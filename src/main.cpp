@@ -128,6 +128,27 @@ static const char *arenaCopy(const char *text) {
 // again". The lower seven once counted showings and no longer do -- but the byte stays a
 // byte, because loadProgress() wipes the blob whenever its size changes and narrowing
 // this would throw away every mark already saved to buy back 15 bytes.
+// Which weekdays the reader is actually at the desk, as a bitmask with Monday at bit 0.
+// The host sends this on every batch and it is kept in NVS, because the weekend is
+// precisely when the host -- a laptop -- is asleep and cannot be asked. A board that
+// forgot over a reboot would light up on a Sunday to nobody.
+static const uint8_t DEFAULT_WORKING_DAYS = 0b0011111;   // Mon-Fri
+uint8_t workingDays = DEFAULT_WORKING_DAYS;
+bool restMode = false;
+bool clockReady = false;
+
+// True only when the clock is trustworthy AND today is not a working day. Without a
+// synced clock this answers false: showing words on a rest day is a far smaller fault
+// than going dark on a working one, so the failure leans towards being on.
+static bool isRestDay() {
+  if (!clockReady) return false;
+  struct tm now;
+  if (!getLocalTime(&now, 0)) return false;
+  // tm_wday has Sunday at 0; the mask has Monday at bit 0.
+  uint8_t bit = (now.tm_wday + 6) % 7;
+  return !(workingDays & (1 << bit));
+}
+
 static const uint8_t KNOWN_BIT = 0x80;
 uint8_t progress[DECK_COUNT];
 
@@ -401,6 +422,28 @@ static bool fetchBatch() {
       fetchFailures = 0;
     }
     return false;
+  }
+
+  // Taken even on a rest reply, which carries no cards: the schedule is the one thing
+  // worth keeping from a batch the board is being told to ignore.
+  if (doc["working_days"].is<JsonArray>()) {
+    uint8_t mask = 0;
+    for (JsonVariant day : doc["working_days"].as<JsonArray>()) {
+      int value = day | -1;
+      if (value >= 0 && value <= 6) mask |= (1 << value);
+    }
+    if (mask && mask != workingDays) {
+      workingDays = mask;
+      prefs.putUChar("workdays", workingDays);
+      Serial.printf("[rest] working days = 0x%02X\n", workingDays);
+    }
+  }
+  if (doc["rest"] | false) {
+    remainingReported = doc["remaining"] | remainingReported;
+    hostMisses = 0;
+    fetchFailures = 0;
+    Serial.println("[rest] host says today is a rest day");
+    return false;   // no cards to take; the loop decides what the panel does
   }
 
   fetchFailures = 0;
@@ -874,10 +917,15 @@ void setup() {
   fillFromDeck();
   nextCard();
 
+  workingDays = prefs.getUChar("workdays", DEFAULT_WORKING_DAYS);
+
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   MDNS.begin("vocab-display");
+  // Asynchronous: this only registers the servers, and the first sync lands seconds later
+  // once Wi-Fi is up. Nothing waits on it -- the board is already showing a card.
+  configTzTime(VOCAB_TZ, "pool.ntp.org", "time.google.com");
 
   Serial.printf("[boot] vocab-display, %u compiled entries, %u remaining, "
                 "rotation=%u swap=%d free heap=%u\n",
@@ -890,6 +938,42 @@ void loop() {
 #if VOCAB_DEBUG
   debugSerial();
 #endif
+
+  if (!clockReady && WiFi.status() == WL_CONNECTED) {
+    struct tm probe;
+    // A clock that has never been set reads as 1970, so any plausible year means NTP
+    // answered. Checked here rather than blocking setup on it.
+    if (getLocalTime(&probe, 0) && probe.tm_year > 120) {
+      clockReady = true;
+      Serial.printf("[clock] %04d-%02d-%02d %02d:%02d, weekday %d\n",
+                    probe.tm_year + 1900, probe.tm_mon + 1, probe.tm_mday,
+                    probe.tm_hour, probe.tm_min, probe.tm_wday);
+    }
+  }
+
+  bool resting = isRestDay();
+  if (resting != restMode) {
+    restMode = resting;
+    backlightOn = !resting;
+    digitalWrite(TFT_BL, backlightOn ? TFT_BACKLIGHT_ON : !TFT_BACKLIGHT_ON);
+    // Clear the panel as well as darkening it, so nothing ghosts through and so Monday
+    // starts from a blank frame rather than Friday's last card.
+    tft.fillScreen(COLOR_BG);
+    needsRender = !resting;
+    Serial.printf("[rest] %s\n", resting ? "entering rest, panel off" : "back to work");
+  }
+  if (restMode) {
+    // Nothing advances, nothing renders, nothing is reported -- the day is not happening.
+    // But the host is still asked, on the same slow retry the offline path uses, because
+    // the schedule itself can change: without this the board reads a stale mask out of
+    // NVS, goes dark, and never reaches the code that would have told it otherwise.
+    if (WiFi.status() == WL_CONNECTED &&
+        millis() - lastFetchAttemptMs >= FETCH_RETRY_MS) {
+      fetchBatch();
+    }
+    delay(200);
+    return;
+  }
 
   uint32_t now = millis();
   uint32_t total = showingBack ? BACK_MS : FRONT_MS;
